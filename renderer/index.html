@@ -132,6 +132,35 @@
     <div id="player-stage" class="player-stage">
       <video id="player-video" class="player-video hidden" playsinline></video>
 
+      <!-- subtitle overlay (external SRT/VTT/ASS + embedded HLS tracks) -->
+      <div id="player-sub-overlay" class="player-sub-overlay hidden"></div>
+
+      <!-- subtitle menu (Helix PlayerSubtitleMenu equivalent) -->
+      <div id="player-submenu" class="player-submenu hidden">
+        <div class="psm-head">
+          <span class="psm-title">Subtitles</span>
+          <button id="psm-refresh" class="psm-icon-btn" title="Search subtitles again" aria-label="Search subtitles again">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path fill="currentColor" d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+          </button>
+          <button id="psm-close" class="psm-icon-btn" title="Close" aria-label="Close subtitle menu">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+        <div id="psm-status" class="psm-status hidden"></div>
+        <div id="psm-body" class="psm-body"></div>
+        <div class="psm-timing">
+          <span class="psm-timing-label">Timing</span>
+          <button id="psm-delay-minus" class="psm-timing-btn" title="Subtitles 0.1s earlier">&minus;</button>
+          <span id="psm-delay-value" class="psm-timing-value">0.0s</span>
+          <button id="psm-delay-plus" class="psm-timing-btn" title="Subtitles 0.1s later">+</button>
+          <button id="psm-delay-reset" class="psm-timing-reset" title="Reset timing">Reset</button>
+        </div>
+      </div>
+
       <div id="player-buffering" class="player-buffering hidden">
         <div class="spinner spinner-lg"></div>
         <p>Loading stream&hellip;</p>
@@ -155,6 +184,11 @@
         <button id="pc-mute" class="pc-btn" title="Mute/Unmute" aria-label="Mute or unmute">
           <svg id="pc-vol-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z"/>
+          </svg>
+        </button>
+        <button id="pc-cc" class="pc-btn" title="Subtitles" aria-label="Toggle subtitle menu">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M19 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1z"/>
           </svg>
         </button>
         <button id="pc-fs" class="pc-btn" title="Fullscreen" aria-label="Toggle fullscreen">

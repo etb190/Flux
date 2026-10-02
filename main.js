@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
+const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtitles.js');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -69,6 +70,37 @@ ipcMain.handle('flux:streams:cancel', () => {
   cancelStreams();
   return true;
 });
+
+// ── IPC: subtitle search (Helix SubtitleService pattern) ─────────────────
+// Returns a requestId immediately; each provider's results stream back as
+// 'flux:subs:progress' events: {kind:'batch', requestId, variants, provider}
+// followed by {kind:'done', requestId, total}.
+let subsRequestSeq = 0;
+
+ipcMain.handle('flux:subs:search', (event, params) => {
+  const wc = event.sender;
+  const requestId = ++subsRequestSeq;
+  cancelSubtitles();                       // abort any previous search
+
+  const send = (payload) => {
+    if (!wc.isDestroyed()) wc.send('flux:subs:progress', payload);
+  };
+
+  searchSubtitles(params || {}, {
+    onBatch: (variants, provider) => send({ requestId, kind: 'batch', variants, provider }),
+    onDone: (total) => send({ requestId, kind: 'done', total })
+  });
+
+  return { requestId };
+});
+
+ipcMain.handle('flux:subs:cancel', () => {
+  cancelSubtitles();
+  return true;
+});
+
+// IPC: download + extract one subtitle variant → UTF-8 text
+ipcMain.handle('flux:subs:download', (_event, variant) => downloadSubtitle(variant));
 
 // ── Player: request header injection + CORS pass-through ────────────────
 // Scraped direct links usually require a specific User-Agent/Referer (the

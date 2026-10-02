@@ -8,6 +8,13 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   onStreamsProgress: (callback) => {
     ipcRenderer.on('flux:streams:progress', (_event, payload) => callback(payload));
   },
+  // Subtitles (Helix SubtitleService port)
+  searchSubtitles: (params) => ipcRenderer.invoke('flux:subs:search', params),
+  cancelSubtitles: () => ipcRenderer.invoke('flux:subs:cancel'),
+  downloadSubtitle: (variant) => ipcRenderer.invoke('flux:subs:download', variant),
+  onSubsProgress: (callback) => {
+    ipcRenderer.on('flux:subs:progress', (_event, payload) => callback(payload));
+  },
   // Player: header injection / CORS rules for direct stream playback
   setPlayerRules: (rules) => ipcRenderer.invoke('flux:player-rules', rules),
   clearPlayerRules: () => ipcRenderer.invoke('flux:player-rules:clear')

@@ -46,6 +46,16 @@
     playerFailMsg: document.getElementById('player-fail-msg'),
     playerFailBack: document.getElementById('player-fail-back'),
     playerControls: document.getElementById('player-controls'),
+    playerSubOverlay: document.getElementById('player-sub-overlay'),
+    playerSubmenu: document.getElementById('player-submenu'),
+    psmRefresh: document.getElementById('psm-refresh'),
+    psmClose: document.getElementById('psm-close'),
+    psmStatus: document.getElementById('psm-status'),
+    psmBody: document.getElementById('psm-body'),
+    psmDelayMinus: document.getElementById('psm-delay-minus'),
+    psmDelayPlus: document.getElementById('psm-delay-plus'),
+    psmDelayReset: document.getElementById('psm-delay-reset'),
+    psmDelayValue: document.getElementById('psm-delay-value'),
     pcPlay: document.getElementById('pc-play'),
     pcPlayIcon: document.getElementById('pc-play-icon'),
     pcCur: document.getElementById('pc-cur'),
@@ -53,6 +63,7 @@
     pcSeek: document.getElementById('pc-seek'),
     pcMute: document.getElementById('pc-mute'),
     pcVolIcon: document.getElementById('pc-vol-icon'),
+    pcCc: document.getElementById('pc-cc'),
     pcFs: document.getElementById('pc-fs')
   };
 
@@ -77,6 +88,180 @@
   let activeSource = null;     // the source being played
   let playedOnce = false;      // a frame actually rendered
   let failTimer = null;        // direct-link connection timeout
+
+  // ── Subtitle state (Helix PlayerScreen subtitle block) ─────────────────
+  let subGroups = [];          // [{language, variants:[{providerName,language,title,downloadUrl,format,extraData}]}]
+  let subSelected = null;      // the loaded SubtitleVariant (null = none)
+  let subCues = [];            // parsed cues of the loaded variant [{start,end,text}]
+  let subDelay = 0;            // seconds; positive = subs show later
+  let subEpisodeKey = '';      // episode the current subGroups belong to
+  let subsRequestId = null;    // in-flight subtitle search
+  let subsPending = 0;         // providers not finished yet
+  let embeddedSubs = [];       // hls.js subtitleTracks [{id, name, lang}]
+  let embeddedActive = null;   // active embedded track id (or null)
+  let embeddedCues = new Map();// embedded track id → cues
+  let subLoadingUrl = null;    // variant being downloaded (menu spinner)
+
+  // ── Player chrome auto-hide state (fullscreen, mouse idle) ────────────
+  let chromeIdleTimer = null;
+  const CHROME_IDLE_MS = 2600;
+
+  // ── Subtitle parsing (port of Helix subtitle_parser.dart) ─────────────
+  // Cues: {start, end, text} — seconds, text already cleaned.
+
+  function subDetectFormat(text) {
+    const head = text.slice(0, 300).trim().toLowerCase();
+    if (head.startsWith('webvtt')) return 'vtt';
+    if (head.includes('[script info]') || head.includes('[v4+ styles]') ||
+        text.toLowerCase().includes('[events]')) return 'ass';
+    return 'srt';
+  }
+
+  function subCleanInline(s) {
+    return s
+      .replace(/<[^>]+>/g, '')            // HTML tags like <i>, <b>, <font>
+      .replace(/\{[^}]*\}/g, '')          // ASS formatting
+      .replace(/\\N/g, '\n')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .trim();
+  }
+
+  function subToSec(h, m, s, ms) {
+    const paddedMs = (ms + '000').substring(0, 3);
+    return (parseInt(h, 10) || 0) * 3600 + (parseInt(m, 10) || 0) * 60 +
+      (parseInt(s, 10) || 0) + (parseInt(paddedMs, 10) || 0) / 1000;
+  }
+
+  function subParseSrt(text) {
+    const cues = [];
+    const blocks = text.split(/\n{2,}/);
+    const timingRe = /(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})/;
+    for (const block of blocks) {
+      const lines = block.split('\n').filter((l) => l.trim());
+      if (lines.length < 2) continue;
+      let timingIdx = /^\d+$/.test(lines[0].trim()) ? 1 : 0;
+      if (timingIdx >= lines.length) continue;
+      const m = timingRe.exec(lines[timingIdx]);
+      if (!m) continue;
+      const start = subToSec(m[1], m[2], m[3], m[4]);
+      const end = subToSec(m[5], m[6], m[7], m[8]);
+      const cleanText = subCleanInline(lines.slice(timingIdx + 1).join('\n'));
+      if (cleanText) cues.push({ start, end, text: cleanText });
+    }
+    cues.sort((a, b) => a.start - b.start);
+    return cues;
+  }
+
+  function subParseVtt(text) {
+    const cues = [];
+    const stripped = text.replace(/^WEBVTT[^\n]*\n+/i, '');
+    const blocks = stripped.split(/\n{2,}/);
+    const timingRe = /(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[,.](\d{1,3})\s*-->\s*(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[,.](\d{1,3})/;
+    for (const block of blocks) {
+      const lines = block.split('\n').filter((l) => l.trim());
+      if (!lines.length) continue;
+      let timingIdx = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('-->')) { timingIdx = i; break; }
+      }
+      if (timingIdx === -1) continue;
+      const m = timingRe.exec(lines[timingIdx]);
+      if (!m) continue;
+      const start = subToSec(m[1] || '0', m[2], m[3], m[4]);
+      const end = subToSec(m[5] || '0', m[6], m[7], m[8]);
+      const cleanText = subCleanInline(lines.slice(timingIdx + 1).join('\n'));
+      if (cleanText) cues.push({ start, end, text: cleanText });
+    }
+    cues.sort((a, b) => a.start - b.start);
+    return cues;
+  }
+
+  function subParseAssTime(s) {
+    const m = /(\d+):(\d{2}):(\d{2})\.(\d{1,3})/.exec(String(s).trim());
+    if (!m) return NaN;
+    return subToSec(m[1], m[2], m[3], (m[4] + '00').substring(0, 3));
+  }
+
+  function subParseAss(text) {
+    const cues = [];
+    const eventsIdx = text.toLowerCase().indexOf('[events]');
+    if (eventsIdx === -1) return cues;
+    const lines = text.slice(eventsIdx).split('\n');
+    let format = null;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (/^format:/i.test(trimmed)) {
+        format = trimmed.slice(7).split(',').map((s) => s.trim().toLowerCase());
+        continue;
+      }
+      if (!/^dialogue:/i.test(trimmed) || !format) continue;
+      const startIdx = format.indexOf('start');
+      const endIdx = format.indexOf('end');
+      const textIdx = format.indexOf('text');
+      if (startIdx === -1 || endIdx === -1 || textIdx === -1) continue;
+
+      // split respecting that text is the last field (may contain commas)
+      const body = trimmed.slice(9);
+      const parts = [];
+      let buf = '';
+      let count = 0;
+      for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        if (c === ',' && count < format.length - 1) {
+          parts.push(buf.trim());
+          buf = '';
+          count++;
+        } else {
+          buf += c;
+        }
+      }
+      parts.push(buf);
+      if (parts.length < format.length) continue;
+
+      const start = subParseAssTime(parts[startIdx]);
+      const end = subParseAssTime(parts[endIdx]);
+      if (Number.isNaN(start) || Number.isNaN(end)) continue;
+      const cleanText = parts[textIdx]
+        .replace(/\{[^}]*\}/g, '')
+        .replace(/\\N/g, '\n')
+        .replace(/\\n/g, ' ')
+        .replace(/\\h/g, ' ')
+        .trim();
+      if (cleanText) cues.push({ start, end, text: cleanText });
+    }
+    cues.sort((a, b) => a.start - b.start);
+    return cues;
+  }
+
+  function subParse(text, format) {
+    const raw = String(text || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
+    const fmt = format || subDetectFormat(raw);
+    if (fmt === 'vtt') return subParseVtt(raw);
+    if (fmt === 'ass') return subParseAss(raw);
+    return subParseSrt(raw);
+  }
+
+  // Binary search: index of the cue active at t, or -1 (Helix findActiveCueIndex)
+  function findActiveCueIndex(cues, t) {
+    let lo = 0;
+    let hi = cues.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const c = cues[mid];
+      if (t < c.start) hi = mid - 1;
+      else if (t >= c.end) lo = mid + 1;
+      else return mid;
+    }
+    return -1;
+  }
 
   const ICON_PLAY = 'M8 5v14l11-7z';
   const ICON_PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
@@ -375,6 +560,22 @@
     scanProviderCount = 0;
     els.sourcesSearch.value = '';
     els.sourcesSize.value = 'all';
+    // New episode → the previously loaded subtitles belong to the old one
+    if (window.fluxAPI && typeof window.fluxAPI.cancelSubtitles === 'function') {
+      window.fluxAPI.cancelSubtitles().catch(() => {});
+    }
+    subsRequestId = null;
+    subsPending = 0;
+    subGroups = [];
+    subSelected = null;
+    subCues = [];
+    subEpisodeKey = '';
+    subLoadingUrl = null;
+    embeddedSubs = [];
+    embeddedActive = null;
+    embeddedCues = new Map();
+    els.playerSubOverlay.classList.add('hidden');
+    els.playerSubOverlay.textContent = '';
     showDetails(els.sourcesView);
     els.sourcesList.innerHTML = '';
     els.sourcesEmpty.classList.add('hidden');
@@ -465,6 +666,289 @@
     window.fluxAPI.setPlayerRules(rules);
   }
 
+  // ── Subtitles: search / menu / rendering (Helix PlayerSubtitleMenu) ────
+  function subtitleSupports() {
+    return window.fluxAPI && typeof window.fluxAPI.searchSubtitles === 'function';
+  }
+
+  function currentSubParams() {
+    const isSeries = currentMeta && currentMeta.type === 'series';
+    const yearMatch = currentMeta && currentMeta.year
+      ? /^(\d{4})/.exec(String(currentMeta.year))
+      : null;
+    return {
+      name: currentMeta ? currentMeta.name : '',
+      imdbId: currentMeta ? currentMeta.id : null,   // Cinemeta ids are imdb tt-ids
+      season: isSeries && lastEpisode ? lastEpisode.season : null,
+      episode: isSeries && lastEpisode ? lastEpisode.episode : null,
+      year: yearMatch ? parseInt(yearMatch[1], 10) : null
+    };
+  }
+
+  function startSubSearch(force) {
+    if (!subtitleSupports()) return;
+    if (activeSource && activeSource.format === 'Embed') return;  // embeds manage their own subs
+    const params = currentSubParams();
+    if (!params.name && !params.imdbId) return;
+
+    const key = [params.imdbId || params.name, params.season ?? '', params.episode ?? ''].join(':');
+    if (!force && key === subEpisodeKey && subGroups.length) return;  // already have this episode
+    subEpisodeKey = key;
+    subGroups = [];
+    subSelected = null;
+    subCues = [];
+    embeddedSubs = [];
+    embeddedActive = null;
+    embeddedCues = new Map();
+    renderSubOverlay();
+    if (!els.playerSubmenu.classList.contains('hidden')) renderSubmenu();
+
+    subsPending = 4;
+    updateSubStatus();
+    window.fluxAPI.searchSubtitles(params).then((res) => {
+      if (res && res.requestId != null) subsRequestId = res.requestId;
+    }).catch(() => {
+      subsPending = 0;
+      updateSubStatus();
+    });
+  }
+
+  function handleSubsEvent(payload) {
+    if (!payload || payload.kind === undefined) return;
+    if (subsRequestId != null && payload.requestId !== subsRequestId) return;
+
+    if (payload.kind === 'batch' && Array.isArray(payload.variants)) {
+      // merge batch (Helix _mergeSubtitleGroups: dedupe URLs, keep sort)
+      const seen = new Set(subGroups.flatMap((g) => g.variants.map((v) => String(v.downloadUrl).toLowerCase())));
+      for (const v of payload.variants) {
+        if (!v || !v.downloadUrl) continue;
+        const urlKey = String(v.downloadUrl).toLowerCase();
+        if (seen.has(urlKey)) continue;
+        seen.add(urlKey);
+        const lang = String(v.language || 'Unknown');
+        let group = subGroups.find((g) => g.language === lang);
+        if (!group) {
+          group = { language: lang, variants: [] };
+          subGroups.push(group);
+        }
+        group.variants.push(v);
+      }
+      subGroups.sort((a, b) => a.language.localeCompare(b.language));
+      if (!els.playerSubmenu.classList.contains('hidden')) renderSubmenu();
+      updateSubStatus();
+    } else if (payload.kind === 'done') {
+      subsPending = 0;
+      updateSubStatus();
+      if (!els.playerSubmenu.classList.contains('hidden')) renderSubmenu();
+    }
+  }
+
+  function updateSubStatus() {
+    const searching = subsPending > 0;
+    els.psmStatus.classList.toggle('hidden', !searching && subGroups.length > 0);
+    if (searching) {
+      els.psmStatus.textContent = subGroups.length
+        ? 'Searching additional subtitles online\u2026'
+        : 'Searching subtitles\u2026';
+    } else if (!subGroups.length && !embeddedSubs.length) {
+      els.psmStatus.classList.remove('hidden');
+      els.psmStatus.textContent = 'No subtitles found for this title.';
+    }
+  }
+
+  function fmtDelay(d) {
+    const sign = d > 0 ? '+' : d < 0 ? '\u2212' : '';
+    return sign + Math.abs(d).toFixed(1) + 's';
+  }
+
+  function setSubDelay(d) {
+    subDelay = Math.max(-30, Math.min(30, Math.round(d * 10) / 10));
+    els.psmDelayValue.textContent = fmtDelay(subDelay);
+    renderSubOverlay();     // re-evaluate the visible cue immediately
+  }
+
+  function subsOff() {
+    subSelected = null;
+    subCues = [];
+    if (hls) { try { hls.subtitleTrack = -1; } catch (_) {} }
+    embeddedActive = null;
+    els.pcCc.classList.remove('sub-active');
+    renderSubOverlay();
+    renderSubmenu();
+  }
+
+  async function selectVariant(variant) {
+    subSelected = variant;
+    subLoadingUrl = String(variant.downloadUrl);
+    renderSubmenu();
+    try {
+      const res = await window.fluxAPI.downloadSubtitle(variant);
+      if (subSelected !== variant) return;   // user picked another meanwhile
+      if (!res || !res.content) {
+        subLoadingUrl = null;
+        subSelected = null;
+        renderSubmenu();
+        els.psmStatus.classList.remove('hidden');
+        els.psmStatus.textContent = 'Failed to download subtitle \u2014 try another one.';
+        return;
+      }
+      subCues = subParse(res.content, res.format === 'vtt' || res.format === 'ass' ? res.format : null);
+      if (hls) { try { hls.subtitleTrack = -1; } catch (_) {} }   // external replaces embedded
+      embeddedActive = null;
+      subLoadingUrl = null;
+      els.pcCc.classList.add('sub-active');
+      renderSubOverlay();
+      renderSubmenu();
+    } catch (_) {
+      subLoadingUrl = null;
+      subSelected = null;
+      renderSubmenu();
+    }
+  }
+
+  function selectEmbedded(id) {
+    embeddedActive = id;
+    subSelected = null;
+    subCues = [];
+    if (hls) {
+      try { hls.subtitleTrack = id; } catch (_) {}
+    }
+    els.pcCc.classList.add('sub-active');
+    renderSubOverlay();
+    renderSubmenu();
+  }
+
+  // Render the current cue (external cues or embedded cues, with delay)
+  function renderSubOverlay() {
+    const video = els.playerVideo;
+    const overlay = els.playerSubOverlay;
+    if (els.playerView.classList.contains('hidden')) return;
+
+    let cues = null;
+    if (embeddedActive != null && embeddedCues.has(embeddedActive)) {
+      cues = embeddedCues.get(embeddedActive);
+    } else if (subSelected && subCues.length) {
+      cues = subCues;
+    }
+
+    let text = '';
+    if (cues && cues.length) {
+      const t = video.currentTime - subDelay;
+      const idx = findActiveCueIndex(cues, t);
+      if (idx !== -1) text = cues[idx].text || '';
+    }
+
+    if (text) {
+      overlay.textContent = text;
+      overlay.classList.remove('hidden');
+    } else {
+      overlay.textContent = '';
+      overlay.classList.add('hidden');
+    }
+  }
+
+  function closeSubmenu() {
+    els.playerSubmenu.classList.add('hidden');
+    scheduleChromeHide();
+  }
+
+  function toggleSubmenu() {
+    if (els.playerSubmenu.classList.contains('hidden')) {
+      wakeChrome();
+      renderSubmenu();
+      els.playerSubmenu.classList.remove('hidden');
+      updateSubStatus();
+    } else {
+      closeSubmenu();
+    }
+  }
+
+  function renderSubmenu() {
+    const body = els.psmBody;
+    body.innerHTML = '';
+
+    // Off row (Helix: "Turn off subtitles")
+    const off = document.createElement('div');
+    off.className = 'psm-row psm-off' + (!subSelected && embeddedActive == null ? ' active' : '');
+    off.textContent = 'Off';
+    off.addEventListener('click', () => { wakeChrome(); subsOff(); });
+    body.appendChild(off);
+
+    // Embedded tracks (HLS WebVTT tracks — Helix "Embedded" section)
+    if (embeddedSubs.length) {
+      const head = document.createElement('div');
+      head.className = 'psm-lang';
+      head.textContent = 'Embedded';
+      body.appendChild(head);
+      for (const tr of embeddedSubs) {
+        const row = document.createElement('div');
+        row.className = 'psm-row' + (embeddedActive === tr.id ? ' active' : '');
+        row.innerHTML =
+          '<span class="psm-row-title"></span>' +
+          '<span class="psm-badge">Track</span>';
+        row.querySelector('.psm-row-title').textContent = tr.name || tr.lang || 'Subtitle track';
+        row.addEventListener('click', () => { wakeChrome(); selectEmbedded(tr.id); });
+        body.appendChild(row);
+      }
+    }
+
+    // Language groups → variants
+    for (const group of subGroups) {
+      const head = document.createElement('div');
+      head.className = 'psm-lang';
+      head.textContent = group.language;
+      body.appendChild(head);
+
+      for (const variant of group.variants) {
+        const row = document.createElement('div');
+        const isActive = subSelected && String(subSelected.downloadUrl) === String(variant.downloadUrl);
+        const isLoading = subLoadingUrl && String(subLoadingUrl) === String(variant.downloadUrl);
+        row.className = 'psm-row' + (isActive ? ' active' : '');
+        row.innerHTML =
+          '<span class="psm-row-title"></span>' +
+          '<span class="psm-badge">' + (variant.providerName || 'Sub') + '</span>' +
+          (variant.format && variant.format !== 'srt'
+            ? '<span class="psm-badge fmt">' + String(variant.format).toUpperCase() + '</span>'
+            : '') +
+          (isActive ? '<span class="psm-check">\u2713</span>' : '') +
+          (isLoading ? '<span class="psm-spinner"></span>' : '');
+        row.querySelector('.psm-row-title').textContent = variant.title || variant.language;
+        row.title = variant.title || '';
+        row.addEventListener('click', () => { wakeChrome(); if (!isActive && !isLoading) selectVariant(variant); });
+        body.appendChild(row);
+      }
+    }
+  }
+
+  // ── Player chrome auto-hide (fullscreen + mouse idle) ──────────────────
+  function chromeCanHide() {
+    if (els.playerView.classList.contains('hidden')) return false;
+    if (!document.fullscreenElement) return false;        // fullscreen only
+    if (!els.playerFail.classList.contains('hidden')) return false;
+    if (!els.playerSubmenu.classList.contains('hidden')) return false;
+    if (els.playerVideo.classList.contains('hidden')) return false;
+    if (els.playerVideo.paused) return false;             // paused keeps chrome
+    return true;
+  }
+
+  function scheduleChromeHide() {
+    clearTimeout(chromeIdleTimer);
+    chromeIdleTimer = setTimeout(() => {
+      if (chromeCanHide()) els.playerView.classList.add('player-idle');
+    }, CHROME_IDLE_MS);
+  }
+
+  function wakeChrome() {
+    els.playerView.classList.remove('player-idle');
+    scheduleChromeHide();
+  }
+
+  function stopChromeHide() {
+    clearTimeout(chromeIdleTimer);
+    chromeIdleTimer = null;
+    els.playerView.classList.remove('player-idle');
+  }
+
   function playDirect(src) {
     const video = els.playerVideo;
     video.classList.remove('hidden');
@@ -486,8 +970,36 @@
     }, 25000);
 
     if (isHls && window.Hls && Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, backBufferLength: 90, maxBufferLength: 30 });
-      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      hls = new Hls({
+        enableWorker: true,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        // Subtitles are rendered by our own overlay (Helix-style styling +
+        // delay support) instead of native <track> elements.
+        renderTextTracksNatively: false
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Embedded WebVTT subtitle tracks → menu (Helix "Embedded" section)
+        try {
+          embeddedSubs = (hls.subtitleTracks || []).map((t) => ({
+            id: t.id, name: t.name || t.lang || 'Track ' + t.id, lang: t.lang
+          }));
+        } catch (_) { embeddedSubs = []; }
+        if (!els.playerSubmenu.classList.contains('hidden')) renderSubmenu();
+        video.play().catch(() => {});
+      });
+      // cues for the active embedded track (renderTextTracksNatively: false)
+      hls.on(Hls.Events.CUES_PARSED, (_e, data) => {
+        if (!data) return;
+        const cues = (data.cues || []).map((c) => ({
+          start: c.start ?? c.startTime ?? 0,
+          end: c.end ?? c.endTime ?? 0,
+          text: c.text || c.content || ''
+        })).filter((c) => c.text);
+        cues.sort((a, b) => a.start - b.start);
+        embeddedCues.set(data.track, cues);
+        if (embeddedActive === data.track) renderSubOverlay();
+      });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data || !data.fatal) return;
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
@@ -551,11 +1063,21 @@
     els.playerVideo.classList.add('hidden');
     els.playerControls.classList.add('hidden');
     els.playerView.classList.remove('hidden');
+    stopChromeHide();
+    els.playerSubmenu.classList.add('hidden');
+    els.playerSubOverlay.classList.add('hidden');
+    els.playerSubOverlay.textContent = '';
+    els.pcCc.classList.toggle('sub-active', !!(subSelected || embeddedActive != null));
 
     applyPlayerRules(src);
 
-    if (src.format === 'Embed') playEmbed(src);
-    else playDirect(src);
+    if (src.format === 'Embed') {
+      playEmbed(src);
+    } else {
+      playDirect(src);
+      // Auto-fetch subtitles for this episode/movie (Helix _fetchInitialSubtitles)
+      startSubSearch(false);
+    }
   }
 
   function closePlayer(silent) {
@@ -578,9 +1100,27 @@
       webviewEl = null;
     }
 
+    // Subtitles: cancel in-flight search, close menu, clear overlay.
+    // subGroups/subSelected survive a source switch (Helix keeps the variant
+    // across sources for the same episode); startSubSearch skips re-searching
+    // while subEpisodeKey still matches.
+    if (window.fluxAPI && typeof window.fluxAPI.cancelSubtitles === 'function') {
+      window.fluxAPI.cancelSubtitles().catch(() => {});
+    }
+    subsRequestId = null;
+    subsPending = 0;
+    subLoadingUrl = null;
+    embeddedSubs = [];
+    embeddedActive = null;
+    embeddedCues = new Map();
+    els.playerSubmenu.classList.add('hidden');
+    els.playerSubOverlay.classList.add('hidden');
+    els.playerSubOverlay.textContent = '';
+
     els.playerBuffering.classList.add('hidden');
     els.playerFail.classList.add('hidden');
     els.playerView.classList.add('hidden');
+    stopChromeHide();
     playedOnce = false;
     activeSource = null;
 
@@ -617,10 +1157,54 @@
       if (Number.isFinite(d) && d > 0) {
         video.currentTime = (parseFloat(els.pcSeek.value) / 100) * d;
       }
+      wakeChrome();
     });
 
-    video.addEventListener('play', () => setPlayIcon(true));
-    video.addEventListener('pause', () => setPlayIcon(false));
+    // Subtitle menu (CC button)
+    els.pcCc.addEventListener('click', () => toggleSubmenu());
+    els.psmClose.addEventListener('click', () => closeSubmenu());
+    els.psmRefresh.addEventListener('click', () => {
+      wakeChrome();
+      startSubSearch(true);
+    });
+    els.psmDelayMinus.addEventListener('click', () => { wakeChrome(); setSubDelay(subDelay - 0.1); });
+    els.psmDelayPlus.addEventListener('click', () => { wakeChrome(); setSubDelay(subDelay + 0.1); });
+    els.psmDelayReset.addEventListener('click', () => { wakeChrome(); setSubDelay(0); });
+
+    // Click outside the subtitle menu closes it. composedPath() is used
+    // because selecting a row rebuilds the menu list synchronously, which
+    // detaches the clicked row before the event finishes bubbling (a plain
+    // e.target.closest() on the detached node would misread it as "outside").
+    els.playerView.addEventListener('click', (e) => {
+      if (els.playerSubmenu.classList.contains('hidden')) return;
+      const path = e.composedPath ? e.composedPath() : [];
+      for (const node of path) {
+        if (node && (node.id === 'player-submenu' || node.id === 'pc-cc')) return;
+      }
+      closeSubmenu();
+    });
+
+    // Chrome auto-hide: any mouse movement wakes the controls; after
+    // CHROME_IDLE_MS of stillness in fullscreen + playing, they fade out.
+    els.playerView.addEventListener('mousemove', () => {
+      if (els.playerView.classList.contains('player-idle') || document.fullscreenElement) wakeChrome();
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        wakeChrome();
+      } else {
+        stopChromeHide();           // leaving fullscreen always shows chrome
+      }
+    });
+
+    video.addEventListener('play', () => {
+      setPlayIcon(true);
+      scheduleChromeHide();         // resuming re-arms the idle hide
+    });
+    video.addEventListener('pause', () => {
+      setPlayIcon(false);
+      wakeChrome();                 // paused → keep controls visible
+    });
     video.addEventListener('loadedmetadata', () => {
       els.pcDur.textContent = fmtTime(video.duration);
     });
@@ -630,6 +1214,7 @@
       if (Number.isFinite(d) && d > 0) {
         els.pcSeek.value = String((video.currentTime / d) * 100);
       }
+      renderSubOverlay();           // subtitle cue step
     });
     video.addEventListener('playing', () => {
       playedOnce = true;
@@ -651,6 +1236,9 @@
 
   if (window.fluxAPI && typeof window.fluxAPI.onStreamsProgress === 'function') {
     window.fluxAPI.onStreamsProgress(handleStreamsEvent);
+  }
+  if (window.fluxAPI && typeof window.fluxAPI.onSubsProgress === 'function') {
+    window.fluxAPI.onSubsProgress(handleSubsEvent);
   }
 
   // ── Search rendering ──────────────────────────────────────────────────
@@ -1062,11 +1650,15 @@
     }
   });
 
-  // Global Esc: player → sources → episodes → results (Helix-like back nav)
+  // Global Esc: subtitle menu → player → sources → episodes → results
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!els.playerView.classList.contains('hidden')) {
-      closePlayer();                 // Esc in player → back to sources
+      if (!els.playerSubmenu.classList.contains('hidden')) {
+        closeSubmenu();            // Esc in subtitle menu → close just the menu
+        return;
+      }
+      closePlayer();               // Esc in player → back to sources
       return;
     }
     if (!els.details.classList.contains('hidden')) {
