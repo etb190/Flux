@@ -31,10 +31,13 @@ const ANGLE_BACKENDS = [
 //              starting with "motn-key-" use the Movie of the Night gateway,
 //              others the RapidAPI one.
 // saaCountry:  2-letter country code for the home page catalogs (us, gb, ...).
+// tmdbApiKey:  TMDB v3 key for the TMDB-powered home rows (trending + the
+//              "Because you watched …" suggestions from the Watched list).
 const DEFAULTS = {
   angleBackend: 'd3d9',
   saaApiKey: 'motn-key-v4-dy95VsCjpM1RaqoZkgrvJjUYtPw3o598',
-  saaCountry: 'us'
+  saaCountry: 'us',
+  tmdbApiKey: '19d475b19a2a345b560687918d8ee98b'
 };
 
 // settingsVersion 2: v0.9.0 stored 'default' both for "never picked" and for

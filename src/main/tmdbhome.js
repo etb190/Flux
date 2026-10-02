@@ -39,8 +39,8 @@ async function getJson(url) {
   }
 }
 
-function tmdbUrl(endpoint, params) {
-  const qs = new URLSearchParams({ api_key: TMDB_API_KEY, ...(params || {}) });
+function tmdbUrl(endpoint, params, key) {
+  const qs = new URLSearchParams({ api_key: key || TMDB_API_KEY, ...(params || {}) });
   return TMDB_BASE + endpoint + '?' + qs.toString();
 }
 
@@ -109,7 +109,7 @@ function mapItem(raw, imdbId) {
 }
 
 // Fetch imdb_id for each TMDB item with a small worker pool.
-async function enrichWithImdbIds(items) {
+async function enrichWithImdbIds(items, key) {
   const out = new Array(items.length).fill(null);
   let next = 0;
 
@@ -118,7 +118,7 @@ async function enrichWithImdbIds(items) {
       const idx = next++;
       const it = items[idx];
       try {
-        const ext = await getJson(tmdbUrl('/' + it.media_type + '/' + it.id + '/external_ids'));
+        const ext = await getJson(tmdbUrl('/' + it.media_type + '/' + it.id + '/external_ids', null, key));
         out[idx] = mapItem(it, ext && ext.imdb_id);
       } catch (_) {
         out[idx] = null;             // skip items that fail enrichment
@@ -136,16 +136,18 @@ async function enrichWithImdbIds(items) {
 
 // ── Trending row ──────────────────────────────────────────────────────────
 // Returns { items: [...] } on success, { items: [], error: 'msg' } on failure.
+// opts.key: the user's TMDB key (settings); falls back to the built-in one.
 async function getTrending(opts) {
   const dir = opts && opts.cacheDir;
+  const key = opts && opts.key;
   try {
     const { data } = await cachedGet(dir, '/trending/all/week?cap=' + ROW_CAP,
       async () => {
-        const body = await getJson(tmdbUrl('/trending/all/week'));
+        const body = await getJson(tmdbUrl('/trending/all/week', null, key));
         const raw = (body && Array.isArray(body.results) ? body.results : [])
           .filter((r) => r && (r.media_type === 'movie' || r.media_type === 'tv'))
           .slice(0, ROW_CAP);
-        return await enrichWithImdbIds(raw);
+        return await enrichWithImdbIds(raw, key);
       });
     return { items: data };
   } catch (e) {

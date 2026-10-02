@@ -23,6 +23,17 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   saveSettings: (patch) => ipcRenderer.invoke('flux:settings:set', patch),
   relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
   getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
-  // Home page (Streaming Availability API: top 10s, popular per service, new)
-  getHome: () => ipcRenderer.invoke('flux:home')
+  // Home page (Streaming Availability API + TMDB: trending, top 10s, new)
+  getHome: () => ipcRenderer.invoke('flux:home'),
+  // Watch history ("Continue watching" row)
+  historyList: () => ipcRenderer.invoke('flux:history:list'),
+  historyAdd: (entry) => ipcRenderer.invoke('flux:history:add', entry),
+  historyRemove: (imdbId) => ipcRenderer.invoke('flux:history:remove', imdbId),
+  // Watched list (drives the suggestion rows)
+  watchedList: () => ipcRenderer.invoke('flux:watched:list'),
+  watchedAdd: (entry) => ipcRenderer.invoke('flux:watched:add', entry),
+  watchedRemove: (imdbId) => ipcRenderer.invoke('flux:watched:remove', imdbId),
+  // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
+  getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
+  tmdbToImdb: (tmdbId, type) => ipcRenderer.invoke('flux:tmdb:imdb', tmdbId, type)
 });

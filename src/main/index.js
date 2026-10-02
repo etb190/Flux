@@ -4,6 +4,8 @@ const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
 const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtitles.js');
 const home = require('./home.js');
+const library = require('./library.js');
+const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
 
 // ── Squirrel (Windows installer lifecycle) ──────────────────────────────
@@ -20,6 +22,7 @@ if (squirrelStartup) {
 // ── Graphics backend (same choice as brave://flags/#use-angle) ───────────
 // Must be applied BEFORE app ready. Saved in userData/flux-settings.json.
 const settingsFile = () => path.join(app.getPath('userData'), 'flux-settings.json');
+const libraryFile = () => path.join(app.getPath('userData'), 'flux-library.json');
 
 (() => {
   const saved = loadSettings(settingsFile());
@@ -229,11 +232,53 @@ ipcMain.handle('flux:home', async () => {
   try {
     return await home.getHomeData({
       saaKey: s.saaApiKey,
+      tmdbKey: s.tmdbApiKey,
       country: s.saaCountry,
       cacheDir: path.join(app.getPath('userData'), 'cache')
     });
   } catch (e) {
     return { error: (e && e.message) || 'Home data failed to load.' };
+  }
+});
+
+// ── IPC: watch history ("Continue watching" row) ──────────────────────────
+ipcMain.handle('flux:history:list', () => library.listHistory(libraryFile()));
+ipcMain.handle('flux:history:add', (_e, entry) => {
+  try { return { history: library.addHistory(libraryFile(), entry) }; }
+  catch (e) { return { error: (e && e.message) || 'Failed to record.' }; }
+});
+ipcMain.handle('flux:history:remove', (_e, imdbId) =>
+  library.removeHistory(libraryFile(), imdbId));
+
+// ── IPC: watched list (manual list that drives the suggestions) ──────────
+ipcMain.handle('flux:watched:list', () => library.listWatched(libraryFile()));
+ipcMain.handle('flux:watched:add', (_e, entry) => {
+  try { return { watched: library.addWatched(libraryFile(), entry) }; }
+  catch (e) { return { error: (e && e.message) || 'Failed to add.' }; }
+});
+ipcMain.handle('flux:watched:remove', (_e, imdbId) =>
+  library.removeWatched(libraryFile(), imdbId));
+
+// ── IPC: TMDB suggestion rows for the watched list ───────────────────────
+ipcMain.handle('flux:suggestions', async () => {
+  const s = loadSettings(settingsFile());
+  const key = s.tmdbApiKey || '';
+  if (!key) return { rows: [] };        // TMDB key cleared → no suggestions
+  try {
+    return await tmdbapi.buildSuggestionRows(
+      key, library.listWatched(libraryFile()));
+  } catch (e) {
+    return { error: (e && e.message) || 'Suggestions failed to load.' };
+  }
+});
+
+// ── IPC: TMDB id → IMDb id (opening a suggestion card's details) ─────────
+ipcMain.handle('flux:tmdb:imdb', async (_e, tmdbId, type) => {
+  const s = loadSettings(settingsFile());
+  try {
+    return { imdbId: await tmdbapi.tmdbToImdb(s.tmdbApiKey, tmdbId, type) };
+  } catch (e) {
+    return { error: (e && e.message) || 'Lookup failed.' };
   }
 });
 

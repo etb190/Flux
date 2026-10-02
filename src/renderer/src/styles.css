@@ -166,3 +166,83 @@ body {
     rgba(11, 14, 20, 0.96) 100%
   );
 }
+
+/* ── Home carousel rows: arrows replace the horizontal scrollbar ───────── */
+.row-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.row-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.row-arrow {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-dim);
+  background: var(--color-raised);
+  border: 1px solid var(--color-edge);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+.row-arrow:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--color-accent);
+  background: rgba(91, 140, 255, 0.16);
+}
+.row-arrow:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Continue-watching card: S/E badge + remove button */
+.cw-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #fff;
+  background: rgba(9, 12, 18, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-x {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cfd6e0;
+  background: rgba(9, 12, 18, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 0;
+}
+.card-x:hover {
+  color: #fff;
+  background: #e5484d;
+  border-color: #e5484d;
+  opacity: 1;
+}
+
+/* Watched tab: search result rows */
+.watched-hit + .watched-hit {
+  border-top: 1px solid var(--color-edge);
+}

@@ -29,6 +29,7 @@ export default function App() {
   const [activeSource, setActiveSource] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [submenuOpen, setSubmenuOpen] = useState(false);
+  const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|watched
 
   const home = useHome();
   const search = useSearch();
@@ -46,10 +47,12 @@ export default function App() {
   const settingsOpenRef = useRef(settingsOpen);
   const activeSourceRef = useRef(activeSource);
   const submenuOpenRef = useRef(submenuOpen);
+  const homeTabRef = useRef(homeTab);
   useEffect(() => { viewRef.current = view; }, [view]);
   useEffect(() => { settingsOpenRef.current = settingsOpen; }, [settingsOpen]);
   useEffect(() => { activeSourceRef.current = activeSource; }, [activeSource]);
   useEffect(() => { submenuOpenRef.current = submenuOpen; }, [submenuOpen]);
+  useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
 
   // ── view entry effects (scroll restore + home lazy load) ──────────────
   useEffect(() => {
@@ -183,7 +186,23 @@ export default function App() {
 
   const openPlayer = useCallback((src) => {
     setActiveSource(src);
-  }, []);
+
+    // Continue watching: record this playback in the history (one entry per
+    // title; series entries carry the season/episode).
+    const api = typeof window !== 'undefined' ? window.fluxAPI : null;
+    if (meta && meta.id && /^tt\d+$/.test(meta.id) &&
+        api && typeof api.historyAdd === 'function') {
+      const isSeries = meta.type === 'series';
+      Promise.resolve(api.historyAdd({
+        imdbId: meta.id,
+        type: meta.type,
+        title: meta.name,
+        poster: meta.poster || null,
+        season: isSeries && episode ? (episode.season ?? 1) : null,
+        episode: isSeries && episode ? (episode.episode ?? 1) : null
+      })).catch(() => {});
+    }
+  }, [meta, episode]);
 
   const closePlayer = useCallback(() => {
     setSubmenuOpen(false);
@@ -213,6 +232,10 @@ export default function App() {
       }
       if (viewRef.current.startsWith('details')) {
         closeDetails();                      // Esc in details → back to results/home
+        return;
+      }
+      if (homeTabRef.current === 'watched') {
+        setHomeTab('feed');                  // Esc in the Watched tab → Home feed
         return;
       }
       setQuery('');
@@ -247,7 +270,13 @@ export default function App() {
 
       <main ref={contentRef} className="flex-1 overflow-y-auto scroll-dark relative">
         {view === 'home' ? (
-          <HomeView home={home} onOpen={(item) => openDetails(item, 'home')} onOpenSettings={() => setSettingsOpen(true)} />
+          <HomeView
+            home={home}
+            onOpen={(item) => openDetails(item, 'home')}
+            onOpenSettings={() => setSettingsOpen(true)}
+            tab={homeTab}
+            onTab={setHomeTab}
+          />
         ) : null}
 
         {view === 'loading' ? <LoadingPane label={'Searching\u2026'} testid="loading" /> : null}

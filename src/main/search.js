@@ -28,7 +28,9 @@ async function searchCatalog(type, query) {
       imdbRating:
         m.imdbRating != null ? String(m.imdbRating)
         : m.rating != null ? String(m.rating)
-        : null
+        : null,
+      // kept for the Watched list → TMDB genre lookups (suggestion rows)
+      genres: Array.isArray(m.genres) ? m.genres.map(String).slice(0, 6) : []
     }))
     .filter((m) => m.id && m.name && m.name !== 'Unknown');
 }

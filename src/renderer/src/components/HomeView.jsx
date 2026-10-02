@@ -1,79 +1,275 @@
-/* ── Home page (Streaming Availability API + TMDB trending) ────────────── */
+/* ── Home page: left sidebar (Home / Watched) + rows ──────────────────────
+ * Rows (feed tab, top → bottom):
+ *   1. "Continue watching"        — local watch history (S/E badge + X)
+ *   2. "Because you watched …"    — TMDB recommendations from the Watched list
+ *   3. API rows                   — SA top 10s / popular / new + TMDB trending
+ * The hero banner was removed in v0.13.0 (user preference).
+ */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import PosterCard from './PosterCard.jsx';
+import WatchedView from './WatchedView.jsx';
+import {
+  ChevronLeftIcon, ChevronRightIcon, CloseIcon, EyeIcon, HomeIcon
+} from './icons.jsx';
 
-function HeroBackdrop({ hero }) {
-  // backdrop → poster → nothing (same fallback chain the vanilla renderer used)
-  const initial = hero.backdrop || hero.poster || '';
-  const [src, setSrc] = useState(initial);
-  useEffect(() => { setSrc(hero.backdrop || hero.poster || ''); }, [hero.backdrop, hero.poster]);
+// ── Sidebar ───────────────────────────────────────────────────────────────
 
-  const handleError = () => {
-    if (hero.poster && src !== hero.poster) setSrc(hero.poster);
-    else setSrc('');
-  };
-
-  if (!src) return null;
+function Sidebar({ tab, onTab }) {
+  const btn = (id, label, icon) => (
+    <button
+      data-testid={'side-' + id}
+      onClick={() => onTab(id)}
+      className={
+        'flex items-center gap-2.5 rounded-[9px] px-3.5 py-2.5 text-[13.5px] font-bold text-left transition-colors ' +
+        (tab === id
+          ? 'bg-accent text-white shadow-[0_0_12px_rgba(91,140,255,0.35)]'
+          : 'text-dim hover:text-ink hover:bg-white/5')
+      }
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
   return (
-    <img
-      src={src}
-      alt={hero.name + ' backdrop'}
-      referrerPolicy="no-referrer"
-      onError={handleError}
-      className="absolute inset-0 w-full h-full object-cover object-top"
-    />
+    <aside
+      data-testid="home-sidebar"
+      className="w-[172px] shrink-0 flex flex-col gap-1 px-3 py-5 bg-raised border-r border-edge self-stretch"
+    >
+      {btn('feed', 'Home', <HomeIcon />)}
+      {btn('watched', 'Watched', <EyeIcon />)}
+    </aside>
   );
 }
 
-function Hero({ hero, onOpen }) {
-  const bits = [];
-  if (hero.year) bits.push(hero.year);
-  if (hero.imdbRating && hero.imdbRating !== 'null') bits.push('\u2605 ' + hero.imdbRating);
-  bits.push(hero.type === 'series' ? 'Series' : 'Movie');
-  if (hero.genres && hero.genres.length) bits.push(hero.genres.slice(0, 3).join(' \u00b7 '));
+// ── Carousel row with arrow buttons (no scrollbar) ───────────────────────
+
+function ArrowBtn({ dir, disabled, onClick }) {
+  return (
+    <button
+      data-testid={'row-arrow-' + dir}
+      aria-label={'Scroll ' + dir}
+      disabled={disabled}
+      onClick={onClick}
+      className="row-arrow"
+    >
+      {dir === 'left' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+    </button>
+  );
+}
+
+function CarouselRow({ title, children, testid }) {
+  const scrollerRef = useRef(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+  const [noScroll, setNoScroll] = useState(true);
+
+  const sync = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setNoScroll(max <= 4);
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft < max - 4);
+  }, []);
+
+  useEffect(() => {
+    sync();
+    const el = scrollerRef.current;
+    if (!el) return undefined;
+    el.addEventListener('scroll', sync, { passive: true });
+    // scrollWidth settles as posters load — re-check + observe resizes
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    const t1 = setTimeout(sync, 900);
+    const t2 = setTimeout(sync, 2600);
+    return () => {
+      el.removeEventListener('scroll', sync);
+      ro.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [sync, children]);
+
+  const page = () =>
+    Math.max((scrollerRef.current ? scrollerRef.current.clientWidth : 600) * 0.85, 320);
 
   return (
-    <section
-      data-testid="home-hero"
-      onClick={() => onOpen(hero)}
-      className="relative h-[420px] -mx-8 -mt-6 cursor-pointer overflow-hidden"
-    >
-      <HeroBackdrop hero={hero} />
-      <div className="hero-shade absolute inset-0" />
-      <div className="absolute bottom-0 left-0 right-0 px-8 pb-8 max-w-3xl">
-        {(hero.services || []).length ? (
-          <div className="flex items-center gap-2 mb-2">
-            {hero.services.slice(0, 3).map((s, i) => (
-              <span
-                key={i}
-                className="hero-chip rounded-full bg-white/10 backdrop-blur border border-white/15 px-3 py-1 text-xs font-medium text-ink"
-              >
-                {s.name}
-              </span>
-            ))}
+    <section data-testid={testid || 'home-row'} className="mt-7">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {noScroll ? null : (
+          <div className="flex gap-1.5">
+            <ArrowBtn dir="left" disabled={!canLeft}
+              onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })} />
+            <ArrowBtn dir="right" disabled={!canRight}
+              onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })} />
           </div>
-        ) : null}
-        <h1 className="text-4xl font-bold leading-tight drop-shadow">{hero.name}</h1>
-        <div className="mt-2 text-sm text-dim flex flex-wrap items-center gap-x-2">
-          {bits.map((b, i) => (
-            <span key={i} className="whitespace-nowrap">{b}</span>
-          ))}
-        </div>
-        {hero.overview ? (
-          <p className="mt-3 text-[15px] leading-relaxed text-ink/90 line-clamp-3">
-            {hero.overview}
-          </p>
-        ) : null}
+        )}
+      </div>
+      <div ref={scrollerRef} className="row-scroll flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+        {children}
       </div>
     </section>
   );
 }
 
+// ── Continue watching (watch history) ─────────────────────────────────────
+
+function HistoryCard({ entry, onOpen, onRemove }) {
+  const badge = entry.type === 'series'
+    ? 'S' + (entry.season ?? 1) + ' \u00b7 E' + (entry.episode ?? 1)
+    : (entry.year || 'Movie');
+  return (
+    <div className="w-[150px] shrink-0 snap-start">
+      <div
+        data-testid="card"
+        title={entry.title}
+        onClick={() => onOpen({
+          id: entry.imdbId, type: entry.type,
+          name: entry.title, poster: entry.poster
+        })}
+        className="relative aspect-[2/3] rounded-xl overflow-hidden bg-hover border border-edge cursor-pointer transition-transform duration-150 hover:scale-[1.04] hover:border-accent/60 group"
+      >
+        {entry.poster ? (
+          <img
+            src={entry.poster}
+            alt={entry.title + ' poster'}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.remove(); }}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-3xl text-dim">🎬</div>
+        )}
+        <span data-testid="cw-badge" className="cw-badge">{badge}</span>
+        <button
+          data-testid="cw-remove"
+          title="Remove from Continue watching"
+          aria-label="Remove from Continue watching"
+          onClick={(e) => { e.stopPropagation(); onRemove(entry); }}
+          className="card-x z-10"
+        >
+          <CloseIcon size={13} />
+        </button>
+      </div>
+      <div className="pt-1.5">
+        <div className="text-[13px] font-medium text-ink truncate">{entry.title}</div>
+      </div>
+    </div>
+  );
+}
+
+function ContinueRow({ active, onOpen }) {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    let alive = true;
+    const api = window.fluxAPI;
+    if (!api || typeof api.historyList !== 'function') return undefined;
+    Promise.resolve(api.historyList())
+      .then((list) => { if (alive) setItems(Array.isArray(list) ? list : []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [active]);
+
+  const remove = useCallback(async (entry) => {
+    const api = window.fluxAPI;
+    if (api && typeof api.historyRemove === 'function') {
+      try { await api.historyRemove(entry.imdbId); } catch (_err) { /* ignore */ }
+    }
+    setItems((list) => list.filter((it) => it.imdbId !== entry.imdbId));
+  }, []);
+
+  if (!items.length) return null;
+  return (
+    <CarouselRow title="Continue watching" testid="continue-row">
+      {items.map((entry) => (
+        <HistoryCard
+          key={entry.imdbId + entry.type}
+          entry={entry}
+          onOpen={onOpen}
+          onRemove={remove}
+        />
+      ))}
+    </CarouselRow>
+  );
+}
+
+// ── Suggestions ("Because you watched …", TMDB) ───────────────────────────
+
+function SuggestionCard({ item, onOpen }) {
+  const open = useCallback(async () => {
+    const api = window.fluxAPI;
+    if (!api || typeof api.tmdbToImdb !== 'function') return;
+    let imdbId = item.imdbId;
+    if (!imdbId) {
+      try {
+        const res = await api.tmdbToImdb(item.tmdbId, item.tmdbType);
+        imdbId = res && res.imdbId;
+      } catch (_err) { return; }
+    }
+    if (!imdbId) return;
+    onOpen({ id: imdbId, type: item.tmdbType, name: item.name, poster: item.poster });
+  }, [item, onOpen]);
+
+  return (
+    <div className="w-[150px] shrink-0 snap-start">
+      <PosterCard
+        item={{
+          id: item.tmdbId, type: item.tmdbType, name: item.name,
+          poster: item.poster, year: item.year, imdbRating: item.imdbRating
+        }}
+        onClick={open}
+      />
+    </div>
+  );
+}
+
+function SuggestionRows({ active, onOpen }) {
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    let alive = true;
+    const api = window.fluxAPI;
+    if (!api || typeof api.getSuggestions !== 'function') return undefined;
+    Promise.resolve(api.getSuggestions())
+      .then((data) => {
+        if (!alive) return;
+        setRows(data && Array.isArray(data.rows)
+          ? data.rows.filter((r) => r.items && r.items.length)
+          : []);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [active]);
+
+  if (!rows.length) return null;
+  return (
+    <>
+      {rows.map((row) => (
+        <CarouselRow key={row.title} title={row.title} testid="suggestion-row">
+          {row.items.map((item) => (
+            <SuggestionCard
+              key={(item.tmdbType || '') + (item.tmdbId || item.name)}
+              item={item}
+              onOpen={onOpen}
+            />
+          ))}
+        </CarouselRow>
+      ))}
+    </>
+  );
+}
+
+// ── States ────────────────────────────────────────────────────────────────
+
 function Skeleton() {
   return (
-    <div data-testid="home-loading" className="px-8 -mt-6">
-      <div className="skeleton h-[420px] -mx-8 w-[calc(100%+4rem)] rounded-none" />
+    <div data-testid="home-loading" className="-mt-6">
       <div className="skeleton h-6 w-56 mt-8" />
       <div className="flex gap-4 mt-4 overflow-hidden">
         {[...Array(6)].map((_, i) => (
@@ -140,46 +336,61 @@ function ErrorCard({ errorMsg, onRetry }) {
   );
 }
 
-function HomeBody({ data, onOpen }) {
+// ── Feed body ─────────────────────────────────────────────────────────────
+
+function HomeBody({ data, onOpen, active }) {
   return (
     <div data-testid="home-body">
-      {data.hero ? <Hero hero={data.hero} onOpen={onOpen} /> : null}
+      <ContinueRow active={active} onOpen={onOpen} />
+      <SuggestionRows active={active} onOpen={onOpen} />
       {data.notice ? (
         <p
           data-testid="home-notice"
-          className="mx-8 mt-4 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
+          className="mt-4 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
         >
           {data.notice}
         </p>
       ) : null}
-      <div className="px-8 pb-2">
-        {(data.rows || []).map((row, ri) =>
-          row.items && row.items.length ? (
-            <section key={ri} data-testid="home-row" className="mt-7">
-              <h2 className="text-lg font-semibold mb-3">{row.title}</h2>
-              <div className="scroll-dark flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
-                {row.items.map((item, ii) => (
-                  <div key={ii} className="w-[150px] shrink-0 snap-start">
-                    <PosterCard item={item} onClick={() => onOpen(item)} />
-                  </div>
-                ))}
+      {(data.rows || []).map((row, ri) =>
+        row.items && row.items.length ? (
+          <CarouselRow key={row.key || ri} title={row.title}>
+            {row.items.map((item, ii) => (
+              <div key={ii} className="w-[150px] shrink-0 snap-start">
+                <PosterCard item={item} onClick={() => onOpen(item)} />
               </div>
-            </section>
-          ) : null
-        )}
-      </div>
-      <p className="px-8 py-6 text-xs leading-relaxed text-dim/80">
+            ))}
+          </CarouselRow>
+        ) : null
+      )}
+      <p className="py-6 text-xs leading-relaxed text-dim/80">
         Home data by the Streaming Availability API (Movie of the Night) &middot;
-        Trending by TMDB. This product uses the TMDB API but is not endorsed or
-        certified by TMDB.
+        Trending &amp; suggestions by TMDB. This product uses the TMDB API but
+        is not endorsed or certified by TMDB.
       </p>
     </div>
   );
 }
 
-export default function HomeView({ home, onOpen, onOpenSettings }) {
-  if (home.status === 'loading' || home.status === 'idle') return <Skeleton />;
-  if (home.status === 'setup') return <SetupCard onOpenSettings={onOpenSettings} />;
-  if (home.status === 'error') return <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />;
-  return <HomeBody data={home.data} onOpen={onOpen} />;
+// ── HomeView ──────────────────────────────────────────────────────────────
+
+export default function HomeView({ home, onOpen, onOpenSettings, tab, onTab }) {
+  const feedActive = tab === 'feed';
+  return (
+    <div className="flex min-h-full items-stretch">
+      <Sidebar tab={tab} onTab={onTab} />
+      <div className="flex-1 min-w-0 px-8 pt-4 pb-2">
+        {tab === 'watched' ? (
+          <WatchedView onOpen={onOpen} />
+        ) : home.status === 'loading' || home.status === 'idle' ? (
+          <Skeleton />
+        ) : home.status === 'setup' ? (
+          <SetupCard onOpenSettings={onOpenSettings} />
+        ) : home.status === 'error' ? (
+          <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />
+        ) : (
+          <HomeBody data={home.data} onOpen={onOpen} active={feedActive} />
+        )}
+      </div>
+    </div>
+  );
 }

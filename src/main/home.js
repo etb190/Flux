@@ -31,12 +31,13 @@ function pickHero(rows) {
 //   { country, hero, rows, notice? }     — success (notice = partial failure)
 async function getHomeData(opts) {
   const saaKey = opts && opts.saaKey;
+  const tmdbKey = opts && opts.tmdbKey;
   const country = opts && opts.country;
   const cacheDir = opts && opts.cacheDir;
 
   const [saaRes, tmdbRes] = await Promise.allSettled([
     saa.getHomeData(saaKey, country, { cacheDir }),
-    tmdb.getTrending({ cacheDir })
+    tmdb.getTrending({ cacheDir, key: tmdbKey })
   ]);
 
   const saaData = saaRes.status === 'fulfilled'
