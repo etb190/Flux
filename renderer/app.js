@@ -1,8 +1,9 @@
-/* ── Flux renderer: search + poster grid ─────────────────────────────── */
+/* ── Flux renderer: search, details, seasons & episodes ──────────────── */
 (() => {
   'use strict';
 
   const CINEMETA_BASE = 'https://v3-cinemeta.strem.io';
+  const EP_BATCH_SIZE = 50;   // Helix: single season with 50+ eps → 50-ep tabs
 
   const els = {
     input: document.getElementById('search'),
@@ -15,17 +16,26 @@
     resultsWrap: document.getElementById('results-wrap'),
     resultsTitle: document.getElementById('results-title'),
     resultsCount: document.getElementById('results-count'),
-    grid: document.getElementById('grid')
+    grid: document.getElementById('grid'),
+    content: document.getElementById('content'),
+    details: document.getElementById('details'),
+    backBtn: document.getElementById('back-btn'),
+    detailsLoading: document.getElementById('details-loading'),
+    detailsError: document.getElementById('details-error'),
+    detailsContent: document.getElementById('details-content')
   };
 
   let debounceTimer = null;
-  let searchSeq = 0;          // guards against stale responses
-  let lastQuery = '';
+  let searchSeq = 0;          // guards against stale search responses
+  let detailsSeq = 0;         // guards against stale detail loads
+  let seasonTabs = [];        // [{label, episodes}] for the open title
+  let currentTab = 0;
+  let resultsScrollTop = 0;   // restored when going back from details
 
   // ── Data layer ────────────────────────────────────────────────────────
-  // In Electron, search runs in the main process (no CORS, future-proof
-  // for stream scraping). Outside Electron (plain browser), fall back to
-  // direct fetch — Cinemeta is CORS-enabled.
+  // In Electron, network calls run in the main process (no CORS,
+  // future-proof for stream scraping). Outside Electron (plain browser),
+  // fall back to direct fetch — Cinemeta is CORS-enabled.
 
   async function searchCatalogDirect(type, query) {
     const url =
@@ -54,6 +64,50 @@
       .filter((m) => m.id && m.name && m.name !== 'Unknown');
   }
 
+  async function getMeta(type, id) {
+    if (window.fluxAPI && typeof window.fluxAPI.getMeta === 'function') {
+      return window.fluxAPI.getMeta(type, id);
+    }
+    // Browser fallback (same request Helix makes)
+    const num = (val) => {
+      if (val == null) return null;
+      const n = parseInt(val, 10);
+      return Number.isNaN(n) ? null : n;
+    };
+    const url =
+      CINEMETA_BASE +
+      '/meta/' + encodeURIComponent(type) +
+      '/' + encodeURIComponent(id) + '.json';
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const m = body && body.meta;
+    if (!m) return null;
+    return {
+      id: String(m.id ?? id),
+      type: String(m.type ?? type),
+      name: String(m.name ?? 'Unknown'),
+      poster: m.poster ? String(m.poster) : null,
+      background: m.background ? String(m.background) : null,
+      description: m.description ? String(m.description) : null,
+      year: m.releaseInfo != null ? String(m.releaseInfo) : null,
+      imdbRating: m.imdbRating != null ? String(m.imdbRating) : null,
+      genres: Array.isArray(m.genres) ? m.genres.map(String) : [],
+      runtime: m.runtime != null ? String(m.runtime) : null,
+      videos: (Array.isArray(m.videos) ? m.videos : [])
+        .map((v) => ({
+          id: String(v.id ?? ''),
+          title: String(v.title ?? v.name ?? 'Episode'),
+          season: num(v.season),
+          episode: num(v.episode ?? v.number),
+          released: v.released ? String(v.released) : null,
+          thumbnail: v.thumbnail ? String(v.thumbnail) : null,
+          overview: String(v.overview ?? v.description ?? '')
+        }))
+        .filter((v) => v.id)
+    };
+  }
+
   async function doSearch(query) {
     if (window.fluxAPI && typeof window.fluxAPI.search === 'function') {
       return window.fluxAPI.search(query);
@@ -72,13 +126,29 @@
     return mixed;
   }
 
-  // ── Rendering ─────────────────────────────────────────────────────────
-  function show(section) {
-    [els.welcome, els.loading, els.error, els.empty, els.resultsWrap]
-      .forEach((el) => el.classList.add('hidden'));
-    section.classList.remove('hidden');
+  // ── View switching ────────────────────────────────────────────────────
+  const searchSections = () =>
+    [els.welcome, els.loading, els.error, els.empty, els.resultsWrap];
+  const detailsSections = () =>
+    [els.detailsLoading, els.detailsError, els.detailsContent];
+
+  function showSearch(section) {
+    els.details.classList.add('hidden');
+    searchSections().forEach((el) => el.classList.add('hidden'));
+    if (section) section.classList.remove('hidden');
   }
 
+  function showDetails(section) {
+    searchSections().forEach((el) => el.classList.add('hidden'));
+    detailsSections().forEach((el) => el.classList.add('hidden'));
+    els.details.classList.remove('hidden');
+    if (section) section.classList.remove('hidden');
+  }
+
+  // Kept for the search flow (used by runSearch / scheduleSearch)
+  const show = (section) => showSearch(section);
+
+  // ── Search rendering ──────────────────────────────────────────────────
   function renderResults(query, items) {
     els.resultsTitle.textContent = 'Results for \u201C' + query + '\u201D';
     els.resultsCount.textContent =
@@ -89,6 +159,7 @@
       const card = document.createElement('div');
       card.className = 'card';
       card.title = item.name;
+      card.addEventListener('click', () => openDetails(item));
 
       const wrap = document.createElement('div');
       wrap.className = 'poster-wrap';
@@ -145,20 +216,294 @@
       els.grid.appendChild(card);
     }
 
-    show(els.resultsWrap);
+    showSearch(els.resultsWrap);
+  }
+
+  // ── Seasons & episodes (Helix: player_episodes_panel.dart pattern) ────
+  function buildSeasonTabs(videos) {
+    const bySeason = new Map();
+    for (const v of videos) {
+      const s = v.season ?? 1;
+      if (!bySeason.has(s)) bySeason.set(s, []);
+      bySeason.get(s).push(v);
+    }
+    for (const list of bySeason.values()) {
+      list.sort((a, b) => (a.episode ?? 0) - (b.episode ?? 0));
+    }
+
+    const numeric = [...bySeason.keys()].filter((s) => s > 0).sort((a, b) => a - b);
+    const hasSpecials = bySeason.has(0);
+
+    const tabs = [];
+    // Helix behavior: one season with 50+ episodes → 50-episode tabs
+    if (numeric.length === 1 && !hasSpecials &&
+        bySeason.get(numeric[0]).length >= EP_BATCH_SIZE) {
+      const eps = bySeason.get(numeric[0]);
+      for (let i = 0; i < eps.length; i += EP_BATCH_SIZE) {
+        const batch = eps.slice(i, i + EP_BATCH_SIZE);
+        tabs.push({
+          label: 'Episodes ' + batch[0].episode + '\u2013' + batch[batch.length - 1].episode,
+          episodes: batch
+        });
+      }
+    } else {
+      for (const s of numeric) {
+        tabs.push({ label: 'Season ' + s, episodes: bySeason.get(s) });
+      }
+      if (hasSpecials) {
+        tabs.push({ label: 'Specials', episodes: bySeason.get(0) });
+      }
+    }
+    return tabs;
+  }
+
+  function formatAirDate(released) {
+    if (!released) return '';
+    const d = new Date(released);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function makeThumb(src, alt, fallbackText) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ep-thumb';
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src;
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.alt = alt;
+      img.addEventListener('error', () => {
+        img.remove();
+        const fb = document.createElement('div');
+        fb.className = 'ep-thumb-fallback';
+        fb.textContent = fallbackText || '\uD83C\uDFAC';
+        wrap.appendChild(fb);
+      });
+      wrap.appendChild(img);
+    } else {
+      const fb = document.createElement('div');
+      fb.className = 'ep-thumb-fallback';
+      fb.textContent = fallbackText || '\uD83C\uDFAC';
+      wrap.appendChild(fb);
+    }
+    return wrap;
+  }
+
+  function renderSeasonTabs() {
+    const row = document.createElement('div');
+    row.className = 'seasons-row';
+    row.id = 'seasons-row';
+
+    seasonTabs.forEach((tab, idx) => {
+      const chip = document.createElement('button');
+      chip.className = 'season-chip' + (idx === currentTab ? ' active' : '');
+      chip.textContent = tab.label;
+      chip.addEventListener('click', () => {
+        if (currentTab === idx) return;
+        currentTab = idx;
+        row.querySelectorAll('.season-chip').forEach((c, i) =>
+          c.classList.toggle('active', i === currentTab));
+        renderEpisodeList(tab);
+      });
+      row.appendChild(chip);
+    });
+    return row;
+  }
+
+  function renderEpisodeList(tab) {
+    const old = document.getElementById('episodes-list');
+    if (old) old.remove();
+
+    const list = document.createElement('div');
+    list.className = 'episodes';
+    list.id = 'episodes-list';
+
+    for (const ep of tab.episodes) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'episode-row';
+
+      rowEl.appendChild(makeThumb(
+        ep.thumbnail, ep.title,
+        ep.episode != null ? String(ep.episode) : '\uD83C\uDFAC'));
+
+      const info = document.createElement('div');
+      info.className = 'ep-info';
+
+      const line = document.createElement('div');
+      line.className = 'ep-line';
+
+      if (ep.season != null && ep.episode != null) {
+        const num = document.createElement('span');
+        num.className = 'ep-num';
+        num.textContent = 'S' + ep.season + ' E' + ep.episode;
+        line.appendChild(num);
+      }
+
+      const title = document.createElement('span');
+      title.className = 'ep-title';
+      title.textContent = ep.title;
+      line.appendChild(title);
+
+      const date = document.createElement('div');
+      date.className = 'ep-date';
+      date.textContent = formatAirDate(ep.released);
+
+      const overview = document.createElement('div');
+      overview.className = 'ep-overview';
+      overview.textContent = ep.overview || '';
+      if (ep.overview) overview.title = ep.overview;
+
+      info.appendChild(line);
+      if (date.textContent) info.appendChild(date);
+      info.appendChild(overview);
+
+      rowEl.appendChild(info);
+      list.appendChild(rowEl);
+    }
+
+    els.detailsContent.appendChild(list);
+  }
+
+  function renderDetails(meta) {
+    els.detailsContent.innerHTML = '';
+    els.detailsContent.scrollTop = 0;
+
+    // ── Hero: backdrop, poster, title, meta line, description ──
+    const hero = document.createElement('div');
+    hero.className = 'hero';
+
+    if (meta.background) {
+      const bg = document.createElement('img');
+      bg.className = 'hero-bg';
+      bg.src = meta.background;
+      bg.referrerPolicy = 'no-referrer';
+      bg.alt = '';
+      bg.addEventListener('error', () => bg.remove());
+      hero.appendChild(bg);
+    }
+
+    const heroBody = document.createElement('div');
+    heroBody.className = 'hero-body';
+
+    const poster = document.createElement('div');
+    poster.className = 'hero-poster';
+    poster.appendChild(makeThumb(meta.poster, meta.name + ' poster', meta.name));
+    heroBody.appendChild(poster);
+
+    const heroInfo = document.createElement('div');
+    heroInfo.className = 'hero-info';
+
+    const name = document.createElement('h1');
+    name.className = 'hero-title';
+    name.textContent = meta.name;
+    heroInfo.appendChild(name);
+
+    const metaLine = document.createElement('div');
+    metaLine.className = 'hero-meta';
+
+    if (meta.imdbRating && meta.imdbRating !== 'null') {
+      const rating = document.createElement('span');
+      rating.className = 'hero-rating';
+      rating.textContent = '\u2605 ' + meta.imdbRating;
+      metaLine.appendChild(rating);
+    }
+    if (meta.year) {
+      const year = document.createElement('span');
+      year.textContent = meta.year;
+      metaLine.appendChild(year);
+    }
+    if (meta.runtime) {
+      const rt = document.createElement('span');
+      rt.textContent = meta.runtime;
+      metaLine.appendChild(rt);
+    }
+    for (const g of meta.genres.slice(0, 3)) {
+      const chip = document.createElement('span');
+      chip.className = 'genre-chip';
+      chip.textContent = g;
+      metaLine.appendChild(chip);
+    }
+    heroInfo.appendChild(metaLine);
+
+    if (meta.description) {
+      const desc = document.createElement('p');
+      desc.className = 'hero-desc';
+      desc.textContent = meta.description;
+      heroInfo.appendChild(desc);
+    }
+
+    heroBody.appendChild(heroInfo);
+    hero.appendChild(heroBody);
+    els.detailsContent.appendChild(hero);
+
+    // ── Series: season tabs + episode list ──
+    if (meta.type === 'series' && meta.videos.length > 0) {
+      seasonTabs = buildSeasonTabs(meta.videos);
+      currentTab = 0;
+
+      const head = document.createElement('div');
+      head.className = 'episodes-header';
+
+      const headTitle = document.createElement('h2');
+      headTitle.textContent = 'Episodes';
+      const headCount = document.createElement('span');
+      headCount.className = 'episodes-count';
+      headCount.textContent = meta.videos.length + ' total';
+      head.appendChild(headTitle);
+      head.appendChild(headCount);
+      els.detailsContent.appendChild(head);
+
+      els.detailsContent.appendChild(renderSeasonTabs());
+      renderEpisodeList(seasonTabs[currentTab]);
+    } else if (meta.type === 'series') {
+      const note = document.createElement('div');
+      note.className = 'coming-note';
+      note.textContent = 'No episode data available for this series yet.';
+      els.detailsContent.appendChild(note);
+    } else {
+      // Movie — playback comes in a later step
+      const note = document.createElement('div');
+      note.className = 'coming-note';
+      note.innerHTML = '\uD83C\uDFAC Movie title &mdash; playback arrives in the next step.';
+      els.detailsContent.appendChild(note);
+    }
+  }
+
+  // ── Details orchestration ─────────────────────────────────────────────
+  async function openDetails(item) {
+    const seq = ++detailsSeq;
+    resultsScrollTop = els.content.scrollTop;
+    showDetails(els.detailsLoading);
+    els.content.scrollTop = 0;
+    try {
+      const meta = await getMeta(item.type, item.id);
+      if (seq !== detailsSeq) return;     // another title was opened meanwhile
+      if (!meta) throw new Error('no meta');
+      renderDetails(meta);
+      showDetails(els.detailsContent);
+    } catch (err) {
+      if (seq !== detailsSeq) return;
+      showDetails(els.detailsError);
+    }
+  }
+
+  function closeDetails() {
+    detailsSeq++;                          // invalidate in-flight loads
+    showSearch(els.resultsWrap);
+    els.content.scrollTop = resultsScrollTop;
   }
 
   // ── Search orchestration ──────────────────────────────────────────────
   async function runSearch(query) {
     const seq = ++searchSeq;
-    lastQuery = query;
-
-    show(els.loading);
+    detailsSeq++;                          // close/invalidate details view
+    showSearch(els.loading);
     try {
       const items = await doSearch(query);
-      if (seq !== searchSeq) return;      // a newer search superseded this one
+      if (seq !== searchSeq) return;
       if (items.length === 0) {
-        show(els.empty);
+        showSearch(els.empty);
       } else {
         renderResults(query, items);
       }
@@ -166,16 +511,16 @@
       if (seq !== searchSeq) return;
       els.errorMsg.textContent =
         'Couldn\u2019t reach the search service. Check your connection and try again.';
-      show(els.error);
+      showSearch(els.error);
     }
   }
 
   function scheduleSearch(query) {
     clearTimeout(debounceTimer);
     if (!query) {
-      searchSeq++;                       // invalidate in-flight searches
+      searchSeq++;
       els.clear.classList.remove('visible');
-      show(els.welcome);
+      showSearch(els.welcome);
       return;
     }
     els.clear.classList.add('visible');
@@ -190,6 +535,10 @@
       const q = els.input.value.trim();
       if (q) runSearch(q);
     } else if (e.key === 'Escape') {
+      if (!els.details.classList.contains('hidden')) {
+        closeDetails();                    // Esc in details → back to results
+        return;
+      }
       els.input.value = '';
       scheduleSearch('');
     }
@@ -200,4 +549,6 @@
     scheduleSearch('');
     els.input.focus();
   });
+
+  els.backBtn.addEventListener('click', closeDetails);
 })();

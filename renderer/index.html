@@ -53,6 +53,29 @@
       </div>
       <div id="grid" class="grid"></div>
     </section>
+
+    <section id="details" class="details hidden">
+      <div class="details-topbar">
+        <button id="back-btn" class="back-btn" title="Back to results" aria-label="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+          <span>Back</span>
+        </button>
+      </div>
+
+      <div id="details-loading" class="details-loading hidden">
+        <div class="spinner"></div>
+        <p>Loading details&hellip;</p>
+      </div>
+
+      <div id="details-error" class="error hidden">
+        <h2>Couldn't load details</h2>
+        <p>Try going back and opening it again.</p>
+      </div>
+
+      <div id="details-content" class="details-content hidden"></div>
+    </section>
   </main>
 
   <script src="app.js"></script>

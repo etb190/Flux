@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const { searchAll } = require('./search.js');
+const { searchAll, fetchMeta } = require('./search.js');
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -27,6 +27,9 @@ function createWindow() {
 
 // ── IPC: search movies + series in parallel (Helix pattern) ──────────────
 ipcMain.handle('flux:search', (_event, query) => searchAll(query));
+
+// ── IPC: fetch full metadata (episodes/seasons for series) ───────────────
+ipcMain.handle('flux:meta', (_event, type, id) => fetchMeta(type, id));
 
 app.whenReady().then(() => {
   createWindow();
