@@ -85,6 +85,32 @@ async function fetchRaw(url, opts) {
   }
 }
 
+// Parse human size strings into bytes: "1.4 GB", "700MB", "850 MB", "1.10 GB".
+// Returns bytes (number) or null when no size unit is present.
+function parseSizeBytes(text) {
+  if (text == null) return null;
+  const m = /(\d+(?:[.,]\d+)?)\s*(TB|GB|MB|KB)\b/i.exec(String(text));
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const u = m[2].toUpperCase();
+  const mult = u === 'TB' ? 1024 ** 4 : u === 'GB' ? 1024 ** 3 : u === 'MB' ? 1024 ** 2 : 1024;
+  return Math.round(n * mult);
+}
+
+// Interpret a machine-provided size value: raw byte counts ("1458823504")
+// pass through as bytes; unit strings ("700 MB") go through parseSizeBytes.
+// Values under 1 MB as bare digits are ambiguous garbage -> null.
+function coerceSizeBytes(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 1024 * 1024 ? n : null;
+  }
+  return parseSizeBytes(s);
+}
+
 function fmtOf(url) {
   if (url.includes('.m3u8')) return 'HLS';
   if (url.includes('.mpd')) return 'DASH';
@@ -113,4 +139,4 @@ function cancelAll() {
   }
 }
 
-module.exports = { UA, fetchPage, resCookies, cookieOf, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll };
+module.exports = { UA, fetchPage, resCookies, cookieOf, fetchJson, fetchText, fetchRaw, parseSizeBytes, coerceSizeBytes, fmtOf, streamKey, cancelAll };

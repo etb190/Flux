@@ -27,7 +27,9 @@
     sourcesTitle: document.getElementById('sources-title'),
     sourcesSub: document.getElementById('sources-sub'),
     sourcesStatus: document.getElementById('sources-status'),
-    providerChips: document.getElementById('provider-chips'),
+    sourcesSearch: document.getElementById('sources-search'),
+    sourcesSize: document.getElementById('sources-size'),
+    sourcesNomatch: document.getElementById('sources-nomatch'),
     sourcesEmpty: document.getElementById('sources-empty'),
     sourcesList: document.getElementById('sources-list'),
 
@@ -62,9 +64,12 @@
   let resultsScrollTop = 0;   // restored when going back from details
   let currentMeta = null;     // meta of the open title
   let streamsRequestId = null; // active sources scan (null = none)
-  let providerRowEls = {};     // provider name -> chip element
   let sourcesCache = [];       // all source rows of the open scan
   let lastEpisode = null;      // episode (or movie pseudo-ep) behind the sources view
+  let sourceQuery = '';        // sources-view text filter
+  let sourceSizeFilter = 'all';// 'all' | 'gt1gb' | 'lt1gb'
+  let scanSummaryText = null;  // 'done' status line (null while scanning)
+  let scanProviderCount = 0;   // providers announced by the init event
 
   // ── Player state ───────────────────────────────────────────────────────
   let hls = null;              // hls.js instance while an HLS source plays
@@ -204,26 +209,13 @@
     }
   }
 
-  function setChipStatus(name, status, count) {
-    const chip = providerRowEls[name];
-    if (!chip) return;
-    const dot = chip.querySelector('.pchip-dot');
-    const label = chip.querySelector('.pchip-status');
-    chip.classList.remove('scanning', 'ok', 'empty', 'error');
-    if (status === 'scanning') {
-      chip.classList.add('scanning');
-      label.textContent = '…';
-    } else if (status === 'ok') {
-      chip.classList.add('ok');
-      label.textContent = String(count);
-    } else if (status === 'empty') {
-      chip.classList.add('empty');
-      label.textContent = '0';
-    } else {
-      chip.classList.add('error');
-      label.textContent = '!';
-    }
-    if (dot) dot.textContent = status === 'ok' ? '\u2713' : (status === 'error' ? '\u00d7' : '·');
+  const GB = 1024 * 1024 * 1024;
+
+  function fmtSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return null;
+    if (bytes >= GB) return (bytes / GB).toFixed(2) + ' GB';
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
   }
 
   function makeSourceRow(src) {
@@ -258,6 +250,14 @@
       q.textContent = src.quality;
       line.appendChild(q);
     }
+
+    const sizeLabel = fmtSize(src.sizeBytes);
+    if (sizeLabel) {
+      const s = document.createElement('span');
+      s.className = 'source-size';
+      s.textContent = sizeLabel;
+      line.appendChild(s);
+    }
     info.appendChild(line);
 
     let host = '';
@@ -279,18 +279,47 @@
     return row;
   }
 
-  function appendSource(src) {
-    els.sourcesEmpty.classList.add('hidden');
-    sourcesCache.push(src);
-    const row = makeSourceRow(src);
-    // Direct links first, embeds pinned below them
-    if (src.format === 'Embed') {
-      els.sourcesList.appendChild(row);
-    } else {
-      const firstEmbed = els.sourcesList.querySelector('.source-row.embed');
-      if (firstEmbed) els.sourcesList.insertBefore(row, firstEmbed);
-      else els.sourcesList.appendChild(row);
+  function sourceMatches(src) {
+    if (sourceQuery) {
+      const hay = ((src.title || '') + ' ' + (src.provider || '') + ' ' +
+        (src.description || '')).toLowerCase();
+      if (!hay.includes(sourceQuery)) return false;
     }
+    if (sourceSizeFilter === 'gt1gb' && (src.sizeBytes == null || src.sizeBytes <= GB)) return false;
+    if (sourceSizeFilter === 'lt1gb' && (src.sizeBytes == null || src.sizeBytes >= GB)) return false;
+    return true;
+  }
+
+  // Rebuild the sources list from the cache with the active filters applied.
+  // Direct links stay on top, embed players pinned below them.
+  function renderSources() {
+    const direct = [];
+    const embeds = [];
+    let shown = 0;
+    for (const src of sourcesCache) {
+      if (!sourceMatches(src)) continue;
+      shown++;
+      (src.format === 'Embed' ? embeds : direct).push(src);
+    }
+
+    els.sourcesList.innerHTML = '';
+    for (const src of direct.concat(embeds)) els.sourcesList.appendChild(makeSourceRow(src));
+
+    els.sourcesEmpty.classList.toggle('hidden',
+      !(scanSummaryText !== null && sourcesCache.length === 0));
+    els.sourcesNomatch.classList.toggle('hidden',
+      !(sourcesCache.length > 0 && shown === 0));
+
+    let status;
+    if (scanSummaryText !== null) {
+      status = scanSummaryText;
+    } else {
+      status = 'Scanning ' + scanProviderCount + ' providers\u2026';
+    }
+    if (sourcesCache.length > 0 && (sourceQuery || sourceSizeFilter !== 'all')) {
+      status += ' \u00b7 showing ' + shown + ' of ' + sourcesCache.length;
+    }
+    els.sourcesStatus.textContent = status;
   }
 
   function updateSourcesStatus(text) {
@@ -308,37 +337,15 @@
     }
 
     if (evt.kind === 'init') {
-      els.providerChips.innerHTML = '';
-      providerRowEls = {};
-      for (const name of evt.providers) {
-        const chip = document.createElement('div');
-        chip.className = 'pchip scanning';
-
-        const dot = document.createElement('span');
-        dot.className = 'pchip-dot';
-        dot.textContent = '\u00b7';
-
-        const nm = document.createElement('span');
-        nm.className = 'pchip-name';
-        nm.textContent = name;
-
-        const st = document.createElement('span');
-        st.className = 'pchip-status';
-        st.textContent = '\u2026';
-
-        chip.appendChild(dot);
-        chip.appendChild(nm);
-        chip.appendChild(st);
-        els.providerChips.appendChild(chip);
-        providerRowEls[name] = chip;
-      }
-      updateSourcesStatus('Scanning ' + evt.providers.length + ' providers\u2026');
+      scanProviderCount = evt.providers ? evt.providers.length : 0;
+      scanSummaryText = null;
+      renderSources();
       return;
     }
 
     if (evt.kind === 'provider') {
-      setChipStatus(evt.provider, evt.status, evt.count);
-      for (const src of evt.sources || []) appendSource(src);
+      for (const src of evt.sources || []) sourcesCache.push(src);
+      renderSources();
       return;
     }
 
@@ -347,14 +354,14 @@
       const direct = evt.directCount || 0;
       const embeds = evt.embedCount || 0;
       if (direct + embeds === 0) {
-        els.sourcesEmpty.classList.remove('hidden');
-        updateSourcesStatus('Scan complete \u2014 no sources found');
+        scanSummaryText = 'Scan complete \u2014 no sources found';
       } else {
         const parts = [];
         if (direct) parts.push(direct + (direct === 1 ? ' direct link' : ' direct links'));
         if (embeds) parts.push(embeds + (embeds === 1 ? ' embed player' : ' embed players'));
-        updateSourcesStatus('Scan complete \u2014 ' + parts.join(', '));
+        scanSummaryText = 'Scan complete \u2014 ' + parts.join(', ');
       }
+      renderSources();
     }
   }
 
@@ -362,11 +369,16 @@
     if (!currentMeta) return;
     lastEpisode = ep;
     sourcesCache = [];
+    sourceQuery = '';
+    sourceSizeFilter = 'all';
+    scanSummaryText = null;
+    scanProviderCount = 0;
+    els.sourcesSearch.value = '';
+    els.sourcesSize.value = 'all';
     showDetails(els.sourcesView);
     els.sourcesList.innerHTML = '';
     els.sourcesEmpty.classList.add('hidden');
-    els.providerChips.innerHTML = '';
-    providerRowEls = {};
+    els.sourcesNomatch.classList.add('hidden');
     const isSeries = currentMeta.type === 'series';
     els.sourcesTitle.textContent = isSeries
       ? 'S' + (ep.season ?? 1) + ' E' + (ep.episode ?? 1) + ' \u00b7 ' + ep.title
@@ -1079,5 +1091,15 @@
   els.backBtn.addEventListener('click', () => {
     if (!els.sourcesView.classList.contains('hidden')) closeSources();
     else closeDetails();
+  });
+
+  // Sources toolbar: text filter + size dropdown
+  els.sourcesSearch.addEventListener('input', () => {
+    sourceQuery = els.sourcesSearch.value.trim().toLowerCase();
+    renderSources();
+  });
+  els.sourcesSize.addEventListener('change', () => {
+    sourceSizeFilter = els.sourcesSize.value;
+    renderSources();
   });
 })();

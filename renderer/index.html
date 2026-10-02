@@ -82,10 +82,26 @@
           <div id="sources-sub" class="sources-sub"></div>
         </div>
         <div id="sources-status" class="sources-status"></div>
-        <div id="provider-chips" class="provider-chips"></div>
+        <div class="sources-toolbar">
+          <div class="sources-search-wrap">
+            <svg class="sources-search-icon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/>
+            </svg>
+            <input id="sources-search" type="text" placeholder="Filter sources..."
+                   autocomplete="off" spellcheck="false" />
+          </div>
+          <select id="sources-size" class="sources-size-select" title="Filter by size" aria-label="Filter by size">
+            <option value="all">All sizes</option>
+            <option value="gt1gb">Greater than 1 GB</option>
+            <option value="lt1gb">Less than 1 GB</option>
+          </select>
+        </div>
         <div id="sources-empty" class="sources-empty hidden">
           <h3>No sources found</h3>
           <p>None of the providers had this episode. Try another one.</p>
+        </div>
+        <div id="sources-nomatch" class="sources-nomatch hidden">
+          No sources match the current filter.
         </div>
         <div id="sources-list" class="sources-list"></div>
       </div>

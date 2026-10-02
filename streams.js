@@ -7,7 +7,8 @@ const { resolveTmdbId } = require('./tmdb.js');
 const p2 = require('./providers2.js');
 const p3 = require('./providers3.js');
 const {
-  UA, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll
+  UA, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll,
+  coerceSizeBytes, parseSizeBytes
 } = require('./http.js');
 
 // ── 1. VidSrc (Helix vidsrc.dart: data.vidsrcme.ru + vidsrc.me fallback) ──
@@ -675,6 +676,15 @@ async function fetchStreams(params, cb) {
         if (!src || !src.url || !String(src.url).startsWith('http')) continue;
         if (seenUrls.has(src.url)) continue;
         seenUrls.add(src.url);
+        // Structured size for the renderer's size filter: explicit sizeBytes /
+        // size from the provider, else parse the size text many providers put
+        // in their title/description ("2.35 GB", "700 MB", raw bytes...).
+        if (src.sizeBytes == null) {
+          const explicit = coerceSizeBytes(src.size);
+          const fromText = explicit != null ? explicit
+            : parseSizeBytes([src.title, src.description].filter(Boolean).join(' '));
+          if (fromText != null) src.sizeBytes = fromText;
+        }
         fresh.push(src);
       }
       providerStats[p.name] = { status: fresh.length ? 'ok' : 'empty', count: fresh.length };

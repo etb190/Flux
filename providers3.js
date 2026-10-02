@@ -768,9 +768,11 @@ async function scrapeRiveStream(ctx) {
         const format = String(src.format ?? 'hls').toUpperCase();
         const size = src.size ? String(src.size) : null;
         let sizeStr = '';
+        let sizeBytes = null;
         if (size) {
           const bytes = parseInt(size, 10);
           if (!isNaN(bytes) && bytes > 0) {
+            sizeBytes = bytes;
             if (bytes >= 1024 * 1024 * 1024) sizeStr = (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
             else if (bytes >= 1024 * 1024) sizeStr = (bytes / (1024 * 1024)).toFixed(1) + ' MB';
             else sizeStr = bytes + ' B';
@@ -783,6 +785,7 @@ async function scrapeRiveStream(ctx) {
           quality: /^\d+p$/.test(quality) ? quality : null,
           description: srcName + ' • ' + quality + ' • ' + format + (sizeStr ? ' • ' + sizeStr : ''),
           url: rawUrl,
+          sizeBytes,
           headers: { 'User-Agent': UA, Referer: 'https://www.rivestream.app/', Origin: 'https://www.rivestream.app' }
         });
       }
