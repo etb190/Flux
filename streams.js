@@ -5,6 +5,7 @@
 //   type ('series'|'movie'), isTv, tmdbId, imdbId, title, year, season, episode }
 const { resolveTmdbId } = require('./tmdb.js');
 const p2 = require('./providers2.js');
+const p3 = require('./providers3.js');
 const {
   UA, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll
 } = require('./http.js');
@@ -596,7 +597,33 @@ const HTTP_PROVIDERS = [
   { name: 'MeowTV', fn: p2.scrapeMeowTv },
   { name: 'VidUp', fn: p2.scrapeVidUp },
   { name: 'Hexa', fn: p2.scrapeHexa },
-  { name: 'VidRock', fn: p2.scrapeVidRock }
+  { name: 'VidRock', fn: p2.scrapeVidRock },
+  // ── batch 3 (providers3.js) — remaining Helix scrapers ──
+  { name: 'Videasy', fn: p3.scrapeVideasy },
+  { name: 'VidFast', fn: p3.scrapeVidFast },
+  { name: 'PeeStream', fn: p3.scrapePeeStream },
+  { name: 'XPass', fn: p3.scrapeXPass },
+  { name: 'Movy', fn: p3.scrapeMovy },
+  { name: 'Vuflix', fn: p3.scrapeVuflix },
+  { name: 'RiveStream', fn: p3.scrapeRiveStream },
+  { name: 'Cinejoy', fn: p3.scrapeCinejoy },
+  { name: 'ZxcStream', fn: p3.scrapeZxcStream },
+  { name: 'VidGod', fn: p3.scrapeVidGod },
+  { name: 'VidVault', fn: p3.scrapeVidVault },
+  { name: 'LookMovie', fn: p3.scrapeLookMovie },
+  { name: 'FlaxMovies', fn: p3.scrapeFlaxMovies },
+  { name: 'Mapple', fn: p3.scrapeMapple },
+  { name: 'Dulo', fn: p3.scrapeDulo },
+  { name: 'CineSu', fn: p3.scrapeCineSu },
+  { name: 'Vadapav', fn: p3.scrapeVadapav },
+  { name: '4KHDHub', fn: p3.scrape4KHDHub },
+  { name: 'DownloadEverything', fn: p3.scrapeDownloadEverything },
+  { name: 'LMScript', fn: p3.scrapeLMScript },
+  { name: 'X-Downloader', fn: p3.scrapeXDownloader },
+  { name: 'KissKH', fn: p3.scrapeKissKH },
+  { name: 'FshareTV', fn: p3.scrapeFshareTV },
+  { name: 'FSonic', fn: p3.scrapeFSonic },
+  { name: 'FSOnline', fn: p3.scrapeFSOnline }
 ];
 
 function cancelStreams() {

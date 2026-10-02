@@ -864,6 +864,7 @@ module.exports = {
   cryptoAb,
   cryptoSd,
   cryptoId,
-  rockDecrypt
+  rockDecrypt,
+  encDecPost
 };
 

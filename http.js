@@ -8,14 +8,39 @@ const UA =
 
 const activeControllers = new Set();
 
-function fetchPage(url, { headers = {}, timeoutMs = 8000, method, body } = {}) {
+function fetchPage(url, { headers = {}, timeoutMs = 8000, method, body, redirect } = {}) {
   const controller = new AbortController();
   activeControllers.add(controller);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { headers, signal: controller.signal, method, body }).finally(() => {
+  return fetch(url, {
+    headers, signal: controller.signal, method, body,
+    redirect: redirect || undefined
+  }).finally(() => {
     clearTimeout(timer);
     activeControllers.delete(controller);
   });
+}
+
+// set-cookie list from a fetch Response (undici exposes getSetCookie())
+function resCookies(res) {
+  try {
+    if (typeof res.headers.getSetCookie === 'function') return res.headers.getSetCookie();
+    const sc = res.headers.get('set-cookie');
+    return sc ? [sc] : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+// Pull cookie pairs matching `re` out of a set-cookie array, e.g. /__Host-amri_session=[^;]+/
+function cookieOf(cookies, re) {
+  const parts = [];
+  for (const c of cookies || []) {
+    const m = re ? c.match(re) : null;
+    if (m) parts.push(m[0]);
+    else if (!re) parts.push(c.split(';')[0]);
+  }
+  return parts.join('; ');
 }
 
 async function fetchJson(url, opts) {
@@ -88,4 +113,4 @@ function cancelAll() {
   }
 }
 
-module.exports = { UA, fetchPage, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll };
+module.exports = { UA, fetchPage, resCookies, cookieOf, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll };
