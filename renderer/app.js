@@ -1772,7 +1772,7 @@
             opt.textContent = b.label;
             els.settingsAngle.appendChild(opt);
           }
-          els.settingsAngle.value = s.angleBackend || 'default';
+          els.settingsAngle.value = s.angleBackend || 'd3d9';
           settingsLoaded = true;
         }
       } catch (_) { /* leave dropdown as-is */ }
