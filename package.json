@@ -1,8 +1,8 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.3.0",
-  "description": "Flux - a lightweight streaming app for Windows",
+  "version": "0.4.0",
+  "description": "Flux - streaming app (Electron)",
   "main": "main.js",
   "author": "etb190",
   "license": "MIT",
@@ -23,6 +23,9 @@
     "files": [
       "main.js",
       "preload.js",
+      "search.js",
+      "streams.js",
+      "tmdb.js",
       "renderer/**",
       "assets/**"
     ],
@@ -33,5 +36,8 @@
       ],
       "icon": "assets/icon.png"
     }
+  },
+  "dependencies": {
+    "hls.js": "^1.7.3"
   }
 }

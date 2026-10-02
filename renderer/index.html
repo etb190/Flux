@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; img-src https: http: data: file:; style-src 'self'; script-src 'self'" />
+        content="default-src 'self'; img-src https: http: data: file:; style-src 'self'; script-src 'self'; media-src 'self' https: http: blob:; connect-src 'self' https: http: blob:; frame-src https: http:; child-src https: http:;" />
   <title>Flux</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -92,6 +92,65 @@
     </section>
   </main>
 
+  <!-- Player overlay (direct HLS/MP4 video or embed webview) -->
+  <div id="player-view" class="player-view hidden">
+    <div class="player-topbar">
+      <button id="player-back" class="back-btn" title="Back to sources" aria-label="Back to sources">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+        </svg>
+        <span>Sources</span>
+      </button>
+      <div class="player-titles">
+        <div id="player-title" class="player-title"></div>
+        <div id="player-sub" class="player-sub"></div>
+      </div>
+      <button id="player-switch" class="switch-btn" title="Pick a different source">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M6.99 11 3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 17V9z"/>
+        </svg>
+        <span>Change source</span>
+      </button>
+    </div>
+
+    <div id="player-stage" class="player-stage">
+      <video id="player-video" class="player-video hidden" playsinline></video>
+
+      <div id="player-buffering" class="player-buffering hidden">
+        <div class="spinner spinner-lg"></div>
+        <p>Loading stream&hellip;</p>
+      </div>
+
+      <div id="player-fail" class="player-fail hidden">
+        <h3>This source couldn&rsquo;t be played</h3>
+        <p id="player-fail-msg">The stream may be offline or blocked. Try a different source below.</p>
+        <button id="player-fail-back" class="fail-btn">Pick another source</button>
+      </div>
+
+      <div id="player-controls" class="player-controls hidden">
+        <button id="pc-play" class="pc-btn" title="Play/Pause" aria-label="Play or pause">
+          <svg id="pc-play-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="currentColor" d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        <span id="pc-cur" class="pc-time">0:00</span>
+        <input id="pc-seek" class="pc-seek" type="range" min="0" max="100" value="0" step="0.1" aria-label="Seek" />
+        <span id="pc-dur" class="pc-time">0:00</span>
+        <button id="pc-mute" class="pc-btn" title="Mute/Unmute" aria-label="Mute or unmute">
+          <svg id="pc-vol-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z"/>
+          </svg>
+        </button>
+        <button id="pc-fs" class="pc-btn" title="Fullscreen" aria-label="Toggle fullscreen">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/hls.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

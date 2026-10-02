@@ -29,7 +29,29 @@
     sourcesStatus: document.getElementById('sources-status'),
     providerChips: document.getElementById('provider-chips'),
     sourcesEmpty: document.getElementById('sources-empty'),
-    sourcesList: document.getElementById('sources-list')
+    sourcesList: document.getElementById('sources-list'),
+
+    // player overlay
+    playerView: document.getElementById('player-view'),
+    playerBack: document.getElementById('player-back'),
+    playerSwitch: document.getElementById('player-switch'),
+    playerTitle: document.getElementById('player-title'),
+    playerSub: document.getElementById('player-sub'),
+    playerStage: document.getElementById('player-stage'),
+    playerVideo: document.getElementById('player-video'),
+    playerBuffering: document.getElementById('player-buffering'),
+    playerFail: document.getElementById('player-fail'),
+    playerFailMsg: document.getElementById('player-fail-msg'),
+    playerFailBack: document.getElementById('player-fail-back'),
+    playerControls: document.getElementById('player-controls'),
+    pcPlay: document.getElementById('pc-play'),
+    pcPlayIcon: document.getElementById('pc-play-icon'),
+    pcCur: document.getElementById('pc-cur'),
+    pcDur: document.getElementById('pc-dur'),
+    pcSeek: document.getElementById('pc-seek'),
+    pcMute: document.getElementById('pc-mute'),
+    pcVolIcon: document.getElementById('pc-vol-icon'),
+    pcFs: document.getElementById('pc-fs')
   };
 
   let debounceTimer = null;
@@ -41,6 +63,20 @@
   let currentMeta = null;     // meta of the open title
   let streamsRequestId = null; // active sources scan (null = none)
   let providerRowEls = {};     // provider name -> chip element
+  let sourcesCache = [];       // all source rows of the open scan
+  let lastEpisode = null;      // episode (or movie pseudo-ep) behind the sources view
+
+  // ── Player state ───────────────────────────────────────────────────────
+  let hls = null;              // hls.js instance while an HLS source plays
+  let webviewEl = null;        // <webview> while an embed source plays
+  let activeSource = null;     // the source being played
+  let playedOnce = false;      // a frame actually rendered
+  let failTimer = null;        // direct-link connection timeout
+
+  const ICON_PLAY = 'M8 5v14l11-7z';
+  const ICON_PAUSE = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
+  const ICON_VOL = 'M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12z';
+  const ICON_MUTE = 'M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21.5 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.3 8.3 0 0 0 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z';
 
   // ── Data layer ────────────────────────────────────────────────────────
   // In Electron, network calls run in the main process (no CORS,
@@ -238,11 +274,14 @@
     play.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
     row.appendChild(play);
 
+    row.addEventListener('click', () => openPlayer(src));
+
     return row;
   }
 
   function appendSource(src) {
     els.sourcesEmpty.classList.add('hidden');
+    sourcesCache.push(src);
     const row = makeSourceRow(src);
     // Direct links first, embeds pinned below them
     if (src.format === 'Embed') {
@@ -321,13 +360,17 @@
 
   async function openSources(ep) {
     if (!currentMeta) return;
+    lastEpisode = ep;
+    sourcesCache = [];
     showDetails(els.sourcesView);
     els.sourcesList.innerHTML = '';
     els.sourcesEmpty.classList.add('hidden');
     els.providerChips.innerHTML = '';
     providerRowEls = {};
-    els.sourcesTitle.textContent =
-      'S' + (ep.season ?? 1) + ' E' + (ep.episode ?? 1) + ' \u00b7 ' + ep.title;
+    const isSeries = currentMeta.type === 'series';
+    els.sourcesTitle.textContent = isSeries
+      ? 'S' + (ep.season ?? 1) + ' E' + (ep.episode ?? 1) + ' \u00b7 ' + ep.title
+      : ep.title;
     els.sourcesSub.textContent = currentMeta.name;
     updateSourcesStatus('Contacting providers\u2026');
 
@@ -352,10 +395,247 @@
   }
 
   function closeSources() {
+    closePlayer(true);          // player can't be open here, but stay safe
     stopScan();
     showDetails(els.detailsContent);
     els.content.scrollTop = 0;
   }
+
+  // ── Player (Helix PlayerScreen equivalent, basic) ──────────────────────
+  function setBuffering(on) {
+    els.playerBuffering.classList.toggle('hidden', !on);
+  }
+
+  function showPlayerFail(msg) {
+    clearTimeout(failTimer);
+    failTimer = null;
+    els.playerFailMsg.textContent =
+      msg || 'The stream may be offline or blocked. Try a different source below.';
+    els.playerBuffering.classList.add('hidden');
+    els.playerFail.classList.remove('hidden');
+  }
+
+  function setPlayIcon(playing) {
+    els.pcPlayIcon.querySelector('path')
+      .setAttribute('d', playing ? ICON_PAUSE : ICON_PLAY);
+  }
+
+  function setVolIcon(muted) {
+    els.pcVolIcon.querySelector('path').setAttribute('d', muted ? ICON_MUTE : ICON_VOL);
+  }
+
+  function fmtTime(t) {
+    if (!Number.isFinite(t) || t < 0) return '0:00';
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = Math.floor(t % 60);
+    return (h ? h + ':' + String(m).padStart(2, '0') : String(m)) +
+      ':' + String(s).padStart(2, '0');
+  }
+
+  // Register Referer/UA injection + CORS passthrough for this playback
+  function applyPlayerRules(src) {
+    if (!(window.fluxAPI && typeof window.fluxAPI.setPlayerRules === 'function')) return;
+    const rules = { headers: [], corsHosts: [] };
+    let host = '';
+    try { host = new URL(src.url).hostname; } catch (_) {}
+    if (host && src.headers) {
+      rules.headers.push({ host, headers: src.headers });
+    }
+    // CORS: any host the other sources point at may serve segments after a
+    // redirect; whitelisting them all is harmless (renderer-only traffic).
+    const hosts = new Set();
+    for (const s of sourcesCache) {
+      try { hosts.add(new URL(s.url).hostname); } catch (_) {}
+    }
+    if (host) hosts.add(host);
+    rules.corsHosts = [...hosts];
+    window.fluxAPI.setPlayerRules(rules);
+  }
+
+  function playDirect(src) {
+    const video = els.playerVideo;
+    video.classList.remove('hidden');
+    els.playerControls.classList.remove('hidden');
+    setBuffering(true);
+
+    const url = src.url;
+    const isHls = src.format === 'HLS' || /\.m3u8($|\?)/i.test(url);
+    const isDash = src.format === 'DASH' || /\.mpd($|\?)/i.test(url);
+
+    if (isDash) {
+      showPlayerFail('DASH streams aren\u2019t supported by the basic player yet. Pick another source below.');
+      return;
+    }
+
+    // If nothing renders within 25s, treat the host as dead
+    failTimer = setTimeout(() => {
+      if (!playedOnce) showPlayerFail('Timed out while contacting the stream host.');
+    }, 25000);
+
+    if (isHls && window.Hls && Hls.isSupported()) {
+      hls = new Hls({ enableWorker: true, backBufferLength: 90, maxBufferLength: 30 });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (!data || !data.fatal) return;
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          try { hls.recoverMediaError(); return; } catch (_) {}
+        }
+        showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.play().catch(() => {});
+    } else if (!isHls) {
+      video.src = url;
+      video.play().catch(() => {});
+    } else {
+      showPlayerFail('HLS playback is not supported in this environment.');
+    }
+  }
+
+  function playEmbed(src) {
+    const wv = document.createElement('webview');
+    wv.setAttribute('partition', 'persist:embeds');
+    wv.setAttribute('allowfullscreen', '');
+    // Present as a regular Windows Chrome \u2014 some embed hosts reject
+    // Electron/unknown user agents outright.
+    wv.setAttribute('useragent',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
+    wv.setAttribute('src', src.url);
+    wv.addEventListener('dom-ready', () => setBuffering(false));
+    wv.addEventListener('did-finish-load', () => setBuffering(false));
+    wv.addEventListener('did-fail-load', (e) => {
+      if (e.errorCode === -3) return;   // aborted navigation \u2014 ignore
+      showPlayerFail('The embed player failed to load (' + (e.errorDescription || e.errorCode) + ').');
+    });
+    webviewEl = wv;
+    els.playerStage.appendChild(wv);
+  }
+
+  async function openPlayer(src) {
+    activeSource = src;
+    playedOnce = false;
+
+    // Header text: show name + S/E for series, title for movies
+    const isSeries = currentMeta && currentMeta.type === 'series';
+    const se = isSeries && lastEpisode
+      ? 'S' + (lastEpisode.season ?? 1) + ' E' + (lastEpisode.episode ?? 1) + ' \u00b7 ' + (lastEpisode.title || '')
+      : '';
+    els.playerTitle.textContent = currentMeta
+      ? currentMeta.name + (isSeries ? ' \u2014 ' + se.split(' \u00b7 ')[0] : '')
+      : (src.title || 'Now playing');
+    els.playerSub.textContent = [
+      se.split(' \u00b7 ').slice(1).join(' \u00b7 '),
+      src.title || src.provider || 'Source'
+    ].filter(Boolean).join('  \u2014  ');
+
+    // Reset previous state
+    els.playerFail.classList.add('hidden');
+    els.playerBuffering.classList.remove('hidden');
+    els.playerVideo.classList.add('hidden');
+    els.playerControls.classList.add('hidden');
+    els.playerView.classList.remove('hidden');
+
+    applyPlayerRules(src);
+
+    if (src.format === 'Embed') playEmbed(src);
+    else playDirect(src);
+  }
+
+  function closePlayer(silent) {
+    if (els.playerView.classList.contains('hidden')) return;
+    if (hls) { try { hls.destroy(); } catch (_) {} hls = null; }
+    clearTimeout(failTimer);
+    failTimer = null;
+
+    const video = els.playerVideo;
+    try { video.pause(); } catch (_) {}
+    video.removeAttribute('src');
+    try { video.load(); } catch (_) {}
+    video.classList.add('hidden');
+    els.playerControls.classList.add('hidden');
+    setPlayIcon(false);
+
+    if (webviewEl) {
+      try { webviewEl.stop(); } catch (_) {}
+      webviewEl.remove();
+      webviewEl = null;
+    }
+
+    els.playerBuffering.classList.add('hidden');
+    els.playerFail.classList.add('hidden');
+    els.playerView.classList.add('hidden');
+    playedOnce = false;
+    activeSource = null;
+
+    if (window.fluxAPI && typeof window.fluxAPI.clearPlayerRules === 'function') {
+      window.fluxAPI.clearPlayerRules();
+    }
+    if (!silent) showDetails(els.sourcesView);   // back to the source list
+  }
+
+  function wirePlayerControls() {
+    const video = els.playerVideo;
+
+    els.playerBack.addEventListener('click', () => closePlayer());
+    els.playerSwitch.addEventListener('click', () => closePlayer());
+    els.playerFailBack.addEventListener('click', () => closePlayer());
+
+    els.pcPlay.addEventListener('click', () => {
+      if (video.paused) video.play().catch(() => {});
+      else video.pause();
+    });
+
+    els.pcMute.addEventListener('click', () => {
+      video.muted = !video.muted;
+      setVolIcon(video.muted);
+    });
+
+    els.pcFs.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else els.playerStage.requestFullscreen().catch(() => {});
+    });
+
+    els.pcSeek.addEventListener('input', () => {
+      const d = video.duration;
+      if (Number.isFinite(d) && d > 0) {
+        video.currentTime = (parseFloat(els.pcSeek.value) / 100) * d;
+      }
+    });
+
+    video.addEventListener('play', () => setPlayIcon(true));
+    video.addEventListener('pause', () => setPlayIcon(false));
+    video.addEventListener('loadedmetadata', () => {
+      els.pcDur.textContent = fmtTime(video.duration);
+    });
+    video.addEventListener('timeupdate', () => {
+      els.pcCur.textContent = fmtTime(video.currentTime);
+      const d = video.duration;
+      if (Number.isFinite(d) && d > 0) {
+        els.pcSeek.value = String((video.currentTime / d) * 100);
+      }
+    });
+    video.addEventListener('playing', () => {
+      playedOnce = true;
+      clearTimeout(failTimer);
+      failTimer = null;
+      setBuffering(false);
+      els.playerFail.classList.add('hidden');
+    });
+    video.addEventListener('waiting', () => {
+      if (!els.playerFail.classList.contains('hidden')) return;
+      setBuffering(true);
+    });
+    video.addEventListener('error', () => {
+      if (!video.currentSrc) return;      // teardown clears src \u2014 ignore
+      showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
+    });
+  }
+  wirePlayerControls();
 
   if (window.fluxAPI && typeof window.fluxAPI.onStreamsProgress === 'function') {
     window.fluxAPI.onStreamsProgress(handleStreamsEvent);
@@ -684,11 +964,16 @@
       note.textContent = 'No episode data available for this series yet.';
       els.detailsContent.appendChild(note);
     } else {
-      // Movie — playback comes in a later step
-      const note = document.createElement('div');
-      note.className = 'coming-note';
-      note.innerHTML = '\uD83C\uDFAC Movie title &mdash; playback arrives in the next step.';
-      els.detailsContent.appendChild(note);
+      // Movie — find sources for the feature film
+      const cta = document.createElement('div');
+      cta.className = 'coming-note';
+      const btn = document.createElement('button');
+      btn.className = 'find-sources-btn';
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg><span>Find sources</span>';
+      btn.addEventListener('click', () =>
+        openSources({ title: meta.name, season: 1, episode: 1 }));
+      cta.appendChild(btn);
+      els.detailsContent.appendChild(cta);
     }
   }
 
@@ -714,6 +999,7 @@
 
   function closeDetails() {
     detailsSeq++;                          // invalidate in-flight loads
+    closePlayer(true);
     stopScan();
     showSearch(els.resultsWrap);
     els.content.scrollTop = resultsScrollTop;
@@ -723,6 +1009,7 @@
   async function runSearch(query) {
     const seq = ++searchSeq;
     detailsSeq++;                          // close/invalidate details view
+    closePlayer(true);
     stopScan();
     showSearch(els.loading);
     try {
@@ -760,18 +1047,27 @@
       clearTimeout(debounceTimer);
       const q = els.input.value.trim();
       if (q) runSearch(q);
-    } else if (e.key === 'Escape') {
-      if (!els.details.classList.contains('hidden')) {
-        if (!els.sourcesView.classList.contains('hidden')) {
-          closeSources();                  // Esc in sources → back to episodes
-        } else {
-          closeDetails();                  // Esc in details → back to results
-        }
-        return;
-      }
-      els.input.value = '';
-      scheduleSearch('');
     }
+  });
+
+  // Global Esc: player → sources → episodes → results (Helix-like back nav)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!els.playerView.classList.contains('hidden')) {
+      closePlayer();                 // Esc in player → back to sources
+      return;
+    }
+    if (!els.details.classList.contains('hidden')) {
+      if (!els.sourcesView.classList.contains('hidden')) {
+        closeSources();              // Esc in sources → back to episodes
+      } else {
+        closeDetails();              // Esc in details → back to results
+      }
+      return;
+    }
+    els.input.value = '';
+    scheduleSearch('');
+    els.input.focus();
   });
 
   els.clear.addEventListener('click', () => {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
@@ -18,7 +18,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webviewTag: true          // embed-player sources (vidsrc, vidlink, ...)
     }
   });
 
@@ -69,7 +70,90 @@ ipcMain.handle('flux:streams:cancel', () => {
   return true;
 });
 
+// ── Player: request header injection + CORS pass-through ────────────────
+// Scraped direct links usually require a specific User-Agent/Referer (the
+// values their scraper sites send). A <video> tag / hls.js XHR can't set
+// Referer itself, so the main process injects them via webRequest while the
+// player is open. hls.js also needs CORS on the m3u8/segment responses, so
+// while the player is active we add Access-Control-Allow-Origin: * to the
+// media hosts it touches.
+//
+// Renderer calls flux:player-rules with:
+//   { headers: [{host, headers: {...}}], corsHosts: ['host1', ...] }
+// and flux:player-rules:clear when the player closes.
+let playerRules = { headers: [], corsHosts: [] };
+
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch (_) { return ''; }
+}
+
+function matchRuleHost(host) {
+  for (const rule of playerRules.headers) {
+    if (host === rule.host || host.endsWith('.' + rule.host)) return rule;
+  }
+  return null;
+}
+
+function matchCorsHost(host) {
+  for (const pattern of playerRules.corsHosts) {
+    if (host === pattern || host.endsWith('.' + pattern)) return true;
+  }
+  return false;
+}
+
+function installPlayerInterceptors() {
+  const ses = session.defaultSession;
+
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = details.requestHeaders;
+    if (details.webContentsId != null && details.resourceType === 'webview') {
+      // embed players manage their own requests
+      callback({ requestHeaders: headers });
+      return;
+    }
+    const host = hostOf(details.url);
+    const rule = host ? matchRuleHost(host) : null;
+    if (rule && rule.headers) {
+      for (const [k, v] of Object.entries(rule.headers)) headers[k] = v;
+    }
+    callback({ requestHeaders: headers });
+  });
+
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType === 'webview') {
+      callback({});
+      return;
+    }
+    const host = hostOf(details.url);
+    if (host && matchCorsHost(host)) {
+      const responseHeaders = { ...details.responseHeaders };
+      // replace any restrictive value the host sent
+      for (const key of Object.keys(responseHeaders)) {
+        if (key.toLowerCase() === 'access-control-allow-origin') delete responseHeaders[key];
+      }
+      responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+      callback({ responseHeaders });
+      return;
+    }
+    callback({});
+  });
+}
+
+ipcMain.handle('flux:player-rules', (_event, rules) => {
+  playerRules = {
+    headers: Array.isArray(rules && rules.headers) ? rules.headers : [],
+    corsHosts: Array.isArray(rules && rules.corsHosts) ? rules.corsHosts : []
+  };
+  return true;
+});
+
+ipcMain.handle('flux:player-rules:clear', () => {
+  playerRules = { headers: [], corsHosts: [] };
+  return true;
+});
+
 app.whenReady().then(() => {
+  installPlayerInterceptors();
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
