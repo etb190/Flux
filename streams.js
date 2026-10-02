@@ -4,48 +4,10 @@
 // Each provider is an async fn(ctx) -> [source] where ctx = {
 //   type ('series'|'movie'), isTv, tmdbId, imdbId, title, year, season, episode }
 const { resolveTmdbId } = require('./tmdb.js');
-
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-
-// Controllers of the currently running scan (for cancellation)
-let activeControllers = new Set();
-
-function fetchPage(url, { headers = {}, timeoutMs = 8000 } = {}) {
-  const controller = new AbortController();
-  activeControllers.add(controller);
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { headers, signal: controller.signal }).finally(() => {
-    clearTimeout(timer);
-    activeControllers.delete(controller);
-  });
-}
-
-async function fetchJson(url, opts) {
-  const res = await fetchPage(url, opts);
-  if (!res.ok) return null;
-  try {
-    return await res.json();
-  } catch (_) {
-    return null;
-  }
-}
-
-async function fetchText(url, opts) {
-  const res = await fetchPage(url, opts);
-  if (!res.ok) return null;
-  try {
-    return await res.text();
-  } catch (_) {
-    return null;
-  }
-}
-
-function fmtOf(url) {
-  if (url.includes('.m3u8')) return 'HLS';
-  if (url.includes('.mpd')) return 'DASH';
-  return 'MP4';
-}
+const p2 = require('./providers2.js');
+const {
+  UA, fetchJson, fetchText, fetchRaw, fmtOf, streamKey, cancelAll
+} = require('./http.js');
 
 // ── 1. VidSrc (Helix vidsrc.dart: data.vidsrcme.ru + vidsrc.me fallback) ──
 async function scrapeVidSrc(ctx) {
@@ -155,7 +117,14 @@ async function scrapeVidApi(ctx) {
     const urls = new Set();
     extractStreamUrls(data, urls);
 
+    // Collapse same-stream token variants: vaplayer returns several
+    // master.m3u8 URLs that differ only by their encoded token (same host,
+    // same path prefix, same filename) — they are one playable source.
+    const seenKeys = new Set();
     for (const url of urls) {
+      const key = streamKey(url);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
       out.push({
         provider: 'VidAPI',
         title: 'VidAPI · ' + fmtOf(url) + ' · 1080p',
@@ -612,15 +581,26 @@ const HTTP_PROVIDERS = [
   { name: 'VidLink', fn: scrapeVidLink },
   { name: 'VidCore', fn: scrapeVidCore },
   { name: 'FlyStream', fn: scrapeFlyStream },
-  { name: '2Embed', fn: scrape2Embed }
+  { name: '2Embed', fn: scrape2Embed },
+  // ── expanded set (providers2.js) ──
+  { name: 'VixSrc', fn: p2.scrapeVixSrc },
+  { name: 'VidZee', fn: p2.scrapeVidZee },
+  { name: 'CineSrc', fn: p2.scrapeCineSrc },
+  { name: 'Bcine', fn: p2.scrapeBcine },
+  { name: 'Nova', fn: p2.scrapeNova },
+  { name: 'MegaSource', fn: p2.scrapeMegaSource },
+  { name: '111477', fn: p2.scrapeA111477 },
+  { name: 'Frame', fn: p2.scrapeFrame },
+  { name: 'Purstream', fn: p2.scrapePurstream },
+  { name: 'MovieNight', fn: p2.scrapeMovieNight },
+  { name: 'MeowTV', fn: p2.scrapeMeowTv },
+  { name: 'VidUp', fn: p2.scrapeVidUp },
+  { name: 'Hexa', fn: p2.scrapeHexa },
+  { name: 'VidRock', fn: p2.scrapeVidRock }
 ];
 
 function cancelStreams() {
-  const controllers = activeControllers;
-  activeControllers = new Set();
-  for (const c of controllers) {
-    try { c.abort(); } catch (_) {}
-  }
+  cancelAll();
 }
 
 // Runs every provider in parallel, reporting progress per provider.
