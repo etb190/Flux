@@ -31,10 +31,67 @@
   </header>
 
   <main id="content">
-    <section id="welcome" class="welcome">
-      <img class="welcome-icon" src="../assets/icon.png" alt="Flux" />
-      <h1>Search anything to begin</h1>
-      <p>Type a movie or series name above &mdash; results appear here.</p>
+    <!-- Home page (Streaming Availability API: top 10s, popular per service) -->
+    <section id="home" class="home">
+      <div id="home-loading" class="home-state hidden">
+        <div class="skeleton hero-sk"></div>
+        <div class="skeleton row-title-sk"></div>
+        <div class="sk-row">
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+        </div>
+        <div class="skeleton row-title-sk"></div>
+        <div class="sk-row">
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+          <div class="skeleton card-sk"></div>
+        </div>
+      </div>
+
+      <div id="home-setup" class="home-state hidden">
+        <div class="home-card">
+          <h2>Set up the home page</h2>
+          <p>
+            The home page is filled by the free Streaming Availability API
+            (daily Top&nbsp;10 lists, popular titles per service, new releases).
+            Grab an instant free key at
+            <a href="https://developers.movieofthenight.com" title="Get a free API key">developers.movieofthenight.com</a>,
+            then paste it in Settings.
+          </p>
+          <button id="home-setup-btn" class="home-btn">Open Settings</button>
+          <p class="home-note">Search keeps working without a key.</p>
+        </div>
+      </div>
+
+      <div id="home-error" class="home-state hidden">
+        <div class="home-card">
+          <h2>Couldn&rsquo;t load the home page</h2>
+          <p id="home-error-msg"></p>
+          <button id="home-retry" class="home-btn">Retry</button>
+        </div>
+      </div>
+
+      <div id="home-body" class="home-body hidden">
+        <section id="home-hero" class="hero hidden">
+          <img id="hero-bg" class="hero-bg" alt="" referrerpolicy="no-referrer" />
+          <div class="hero-shade"></div>
+          <div class="hero-info">
+            <div id="hero-services" class="hero-services"></div>
+            <h1 id="hero-title"></h1>
+            <div id="hero-meta" class="hero-meta"></div>
+            <p id="hero-overview" class="hero-overview"></p>
+          </div>
+        </section>
+        <div id="home-rows"></div>
+        <p class="home-attribution">Home data by the Streaming Availability API (Movie of the Night)</p>
+      </div>
     </section>
 
     <section id="loading" class="loading hidden">
@@ -137,6 +194,21 @@
           on your GPU. Takes effect after Flux restarts.
         </p>
         <p id="settings-gpu" class="settings-gpu"></p>
+      </div>
+
+      <div class="settings-section">
+        <label class="settings-label" for="settings-saa-key">Streaming Availability API key</label>
+        <input id="settings-saa-key" class="settings-input" type="password"
+               placeholder="motn-key-... or RapidAPI key" autocomplete="off" spellcheck="false" />
+        <p class="settings-hint">
+          Fills the home page (daily Top&nbsp;10s, popular per service, new
+          releases). Get an instant free key at
+          <a href="https://developers.movieofthenight.com">developers.movieofthenight.com</a>.
+        </p>
+        <label class="settings-label" for="settings-saa-country">Country (home catalogs)</label>
+        <input id="settings-saa-country" class="settings-input settings-input-sm" type="text"
+               placeholder="us" maxlength="2" autocomplete="off" spellcheck="false" />
+        <p class="settings-hint">Two-letter code: us, gb, fr, es, it, ma&hellip;</p>
       </div>
 
       <div class="settings-foot">

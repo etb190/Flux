@@ -3,6 +3,7 @@ const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
 const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtitles.js');
+const saa = require('./saa.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
 
 // ── Graphics backend (same choice as brave://flags/#use-angle) ───────────
@@ -204,6 +205,18 @@ ipcMain.handle('flux:settings:get', () => ({
 }));
 
 ipcMain.handle('flux:settings:set', (_event, patch) => saveSettings(settingsFile(), patch));
+
+// ── IPC: home page (Streaming Availability API) ──────────────────────────
+ipcMain.handle('flux:home', async () => {
+  const s = loadSettings(settingsFile());
+  try {
+    return await saa.getHomeData(s.saaApiKey, s.saaCountry, {
+      cacheDir: path.join(app.getPath('userData'), 'cache')
+    });
+  } catch (e) {
+    return { error: (e && e.message) || 'Home data failed to load.' };
+  }
+});
 
 ipcMain.handle('flux:app:relaunch', () => {
   app.relaunch();

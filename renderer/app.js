@@ -8,7 +8,21 @@
   const els = {
     input: document.getElementById('search'),
     clear: document.getElementById('clear'),
-    welcome: document.getElementById('welcome'),
+    home: document.getElementById('home'),
+    homeLoading: document.getElementById('home-loading'),
+    homeSetup: document.getElementById('home-setup'),
+    homeError: document.getElementById('home-error'),
+    homeErrorMsg: document.getElementById('home-error-msg'),
+    homeRetry: document.getElementById('home-retry'),
+    homeSetupBtn: document.getElementById('home-setup-btn'),
+    homeBody: document.getElementById('home-body'),
+    hero: document.getElementById('home-hero'),
+    heroBg: document.getElementById('hero-bg'),
+    heroServices: document.getElementById('hero-services'),
+    heroTitle: document.getElementById('hero-title'),
+    heroMeta: document.getElementById('hero-meta'),
+    heroOverview: document.getElementById('hero-overview'),
+    homeRows: document.getElementById('home-rows'),
     loading: document.getElementById('loading'),
     error: document.getElementById('error'),
     errorMsg: document.getElementById('error-msg'),
@@ -71,6 +85,8 @@
     settingsView: document.getElementById('settings-view'),
     settingsAngle: document.getElementById('settings-angle'),
     settingsGpu: document.getElementById('settings-gpu'),
+    settingsSaaKey: document.getElementById('settings-saa-key'),
+    settingsSaaCountry: document.getElementById('settings-saa-country'),
     settingsSave: document.getElementById('settings-save'),
     settingsClose: document.getElementById('settings-close')
   };
@@ -89,6 +105,13 @@
   let sourceSizeFilter = 'all';// 'all' | 'gt1gb' | 'lt1gb'
   let scanSummaryText = null;  // 'done' status line (null while scanning)
   let scanProviderCount = 0;   // providers announced by the init event
+
+  // ── Home page state (Streaming Availability API) ───────────────────────
+  let homeSeq = 0;            // guards against stale home responses
+  let homeLoaded = false;     // a successful payload has been rendered
+  let homeLoading = false;    // request in flight
+  let detailsReturn = 'results'; // which view Esc/Back returns to
+  let homeScrollTop = 0;      // home vertical scroll before details
 
   // ── Player state ───────────────────────────────────────────────────────
   let hls = null;              // hls.js instance while an HLS source plays
@@ -402,7 +425,7 @@
 
   // ── View switching ────────────────────────────────────────────────────
   const searchSections = () =>
-    [els.welcome, els.loading, els.error, els.empty, els.resultsWrap];
+    [els.home, els.loading, els.error, els.empty, els.resultsWrap];
   const detailsSections = () =>
     [els.detailsLoading, els.detailsError, els.detailsContent, els.sourcesView];
 
@@ -410,6 +433,10 @@
     els.details.classList.add('hidden');
     searchSections().forEach((el) => el.classList.add('hidden'));
     if (section) section.classList.remove('hidden');
+    if (section === els.home) {
+      els.content.scrollTop = homeScrollTop;
+      if (!homeLoaded && !homeLoading) loadHome();
+    }
   }
 
   function showDetails(section) {
@@ -421,6 +448,102 @@
 
   // Kept for the search flow (used by runSearch / scheduleSearch)
   const show = (section) => showSearch(section);
+
+  // ── Home page (Streaming Availability API) ────────────────────────────
+  function homeState(el) {
+    [els.homeLoading, els.homeSetup, els.homeError, els.homeBody]
+      .forEach((s) => s.classList.add('hidden'));
+    if (el) el.classList.remove('hidden');
+  }
+
+  async function loadHome(force) {
+    const seq = ++homeSeq;
+    homeLoading = true;
+    if (force || !homeLoaded) homeState(els.homeLoading);
+    try {
+      const api = window.fluxAPI;
+      if (!api || typeof api.getHome !== 'function') {
+        if (seq === homeSeq) homeState(els.homeSetup);
+        return;
+      }
+      const data = await api.getHome();
+      if (seq !== homeSeq) return;          // a newer load superseded this one
+      homeLoading = false;
+      if (!data || data.noKey) {
+        homeState(els.homeSetup);
+      } else if (data.error) {
+        els.homeErrorMsg.textContent = String(data.error);
+        homeState(els.homeError);
+      } else {
+        renderHome(data);
+        homeLoaded = true;
+      }
+    } catch (err) {
+      if (seq !== homeSeq) return;
+      homeLoading = false;
+      els.homeErrorMsg.textContent =
+        'Couldn\u2019t reach the Streaming Availability API. Check your connection and try again.';
+      homeState(els.homeError);
+    }
+  }
+
+  function renderHome(data) {
+    renderHero(data.hero);
+    els.homeRows.innerHTML = '';
+    for (const row of data.rows || []) {
+      if (!row.items || !row.items.length) continue;
+      const section = document.createElement('div');
+      section.className = 'home-row';
+      const h2 = document.createElement('h2');
+      h2.className = 'row-title';
+      h2.textContent = row.title;
+      const scroller = document.createElement('div');
+      scroller.className = 'row-scroller';
+      for (const item of row.items) {
+        const card = makeCard(item, 'home');
+        scroller.appendChild(card);
+      }
+      section.appendChild(h2);
+      section.appendChild(scroller);
+      els.homeRows.appendChild(section);
+    }
+    homeState(els.homeBody);
+  }
+
+  function renderHero(hero) {
+    if (!hero) {
+      els.hero.classList.add('hidden');
+      return;
+    }
+    els.heroBg.src = hero.backdrop || hero.poster || '';
+    els.heroBg.alt = hero.name + ' backdrop';
+    els.heroBg.onerror = () => {
+      if (hero.poster && els.heroBg.src !== hero.poster) {
+        els.heroBg.src = hero.poster;
+      } else {
+        els.heroBg.removeAttribute('src');
+      }
+    };
+    els.heroServices.innerHTML = '';
+    for (const s of (hero.services || []).slice(0, 3)) {
+      const chip = document.createElement('span');
+      chip.className = 'hero-chip';
+      chip.textContent = s.name;
+      els.heroServices.appendChild(chip);
+    }
+    els.heroTitle.textContent = hero.name;
+    const bits = [];
+    if (hero.year) bits.push(hero.year);
+    if (hero.imdbRating && hero.imdbRating !== 'null') {
+      bits.push('\u2605 ' + hero.imdbRating);
+    }
+    bits.push(hero.type === 'series' ? 'Series' : 'Movie');
+    if (hero.genres && hero.genres.length) bits.push(hero.genres.slice(0, 3).join(' \u00b7 '));
+    els.heroMeta.textContent = bits.join('  \u00b7  ');
+    els.heroOverview.textContent = hero.overview || '';
+    els.hero.onclick = () => openDetails(hero, 'home');
+    els.hero.classList.remove('hidden');
+  }
 
   // ── Sources scan (episode click) ───────────────────────────────────────
   function stopScan() {
@@ -1286,73 +1409,73 @@
   }
 
   // ── Search rendering ──────────────────────────────────────────────────
+  function makeCard(item, from) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.title = item.name;
+    card.addEventListener('click', () => openDetails(item, from || 'results'));
+
+    const wrap = document.createElement('div');
+    wrap.className = 'poster-wrap';
+
+    if (item.poster) {
+      const img = document.createElement('img');
+      img.src = item.poster;
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.alt = item.name + ' poster';
+      img.addEventListener('error', () => {
+        img.remove();
+        const fb = document.createElement('div');
+        fb.className = 'poster-fallback';
+        fb.textContent = '\uD83C\uDFAC';
+        wrap.appendChild(fb);
+      });
+      wrap.appendChild(img);
+    } else {
+      const fb = document.createElement('div');
+      fb.className = 'poster-fallback';
+      fb.textContent = '\uD83C\uDFAC';
+      wrap.appendChild(fb);
+    }
+
+    if (item.imdbRating && item.imdbRating !== 'null') {
+      const chip = document.createElement('span');
+      chip.className = 'rating-chip';
+      chip.textContent = '\u2605 ' + item.imdbRating;
+      wrap.appendChild(chip);
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'type-badge ' + (item.type === 'series' ? 'series' : 'movie');
+    badge.textContent = item.type === 'series' ? 'Series' : 'Movie';
+    wrap.appendChild(badge);
+
+    const meta = document.createElement('div');
+    meta.className = 'card-meta';
+
+    const title = document.createElement('div');
+    title.className = 'card-title';
+    title.textContent = item.name;
+
+    const sub = document.createElement('div');
+    sub.className = 'card-sub';
+    sub.textContent = item.year || '';
+
+    meta.appendChild(title);
+    meta.appendChild(sub);
+
+    card.appendChild(wrap);
+    card.appendChild(meta);
+    return card;
+  }
+
   function renderResults(query, items) {
     els.resultsTitle.textContent = 'Results for \u201C' + query + '\u201D';
     els.resultsCount.textContent =
       items.length + (items.length === 1 ? ' title' : ' titles');
     els.grid.innerHTML = '';
-
-    for (const item of items) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.title = item.name;
-      card.addEventListener('click', () => openDetails(item));
-
-      const wrap = document.createElement('div');
-      wrap.className = 'poster-wrap';
-
-      if (item.poster) {
-        const img = document.createElement('img');
-        img.src = item.poster;
-        img.loading = 'lazy';
-        img.referrerPolicy = 'no-referrer';
-        img.alt = item.name + ' poster';
-        img.addEventListener('error', () => {
-          img.remove();
-          const fb = document.createElement('div');
-          fb.className = 'poster-fallback';
-          fb.textContent = '\uD83C\uDFAC';
-          wrap.appendChild(fb);
-        });
-        wrap.appendChild(img);
-      } else {
-        const fb = document.createElement('div');
-        fb.className = 'poster-fallback';
-        fb.textContent = '\uD83C\uDFAC';
-        wrap.appendChild(fb);
-      }
-
-      if (item.imdbRating && item.imdbRating !== 'null') {
-        const chip = document.createElement('span');
-        chip.className = 'rating-chip';
-        chip.textContent = '\u2605 ' + item.imdbRating;
-        wrap.appendChild(chip);
-      }
-
-      const badge = document.createElement('span');
-      badge.className = 'type-badge ' + (item.type === 'series' ? 'series' : 'movie');
-      badge.textContent = item.type === 'series' ? 'Series' : 'Movie';
-      wrap.appendChild(badge);
-
-      const meta = document.createElement('div');
-      meta.className = 'card-meta';
-
-      const title = document.createElement('div');
-      title.className = 'card-title';
-      title.textContent = item.name;
-
-      const sub = document.createElement('div');
-      sub.className = 'card-sub';
-      sub.textContent = item.year || '';
-
-      meta.appendChild(title);
-      meta.appendChild(sub);
-
-      card.appendChild(wrap);
-      card.appendChild(meta);
-      els.grid.appendChild(card);
-    }
-
+    for (const item of items) els.grid.appendChild(makeCard(item, 'results'));
     showSearch(els.resultsWrap);
   }
 
@@ -1622,11 +1745,13 @@
   }
 
   // ── Details orchestration ─────────────────────────────────────────────
-  async function openDetails(item) {
+  async function openDetails(item, from) {
     const seq = ++detailsSeq;
     currentMeta = null;
     stopScan();
-    resultsScrollTop = els.content.scrollTop;
+    detailsReturn = from === 'home' ? 'home' : 'results';
+    if (detailsReturn === 'home') homeScrollTop = els.content.scrollTop;
+    else resultsScrollTop = els.content.scrollTop;
     showDetails(els.detailsLoading);
     els.content.scrollTop = 0;
     try {
@@ -1645,8 +1770,12 @@
     detailsSeq++;                          // invalidate in-flight loads
     closePlayer(true);
     stopScan();
-    showSearch(els.resultsWrap);
-    els.content.scrollTop = resultsScrollTop;
+    if (detailsReturn === 'home') {
+      showSearch(els.home);
+    } else {
+      showSearch(els.resultsWrap);
+      els.content.scrollTop = resultsScrollTop;
+    }
   }
 
   // ── Search orchestration ──────────────────────────────────────────────
@@ -1677,7 +1806,7 @@
     if (!query) {
       searchSeq++;
       els.clear.classList.remove('visible');
-      showSearch(els.welcome);
+      showSearch(els.home);
       return;
     }
     els.clear.classList.add('visible');
@@ -1743,9 +1872,18 @@
     renderSources();
   });
 
-  // ── Settings (graphics backend etc.) ─────────────────────────────────
+  // ── Settings (graphics backend, Streaming Availability API key) ───────
   let settingsLoaded = false;
   let settingsSaving = false;
+  let settingsAngleAtLoad = null;   // to detect ANGLE changes (needs relaunch)
+
+  function syncSaveLabel() {
+    const changed = settingsAngleAtLoad != null &&
+      els.settingsAngle.value !== settingsAngleAtLoad;
+    if (!settingsSaving) {
+      els.settingsSave.textContent = changed ? 'Save & Restart' : 'Save';
+    }
+  }
 
   function closeSettings() {
     els.settingsView.classList.add('hidden');
@@ -1754,7 +1892,7 @@
   async function openSettings() {
     els.settingsView.classList.remove('hidden');
     els.settingsSave.disabled = false;
-    els.settingsSave.textContent = 'Save & Restart';
+    els.settingsSave.textContent = 'Save';
     els.settingsGpu.textContent = 'Checking GPU\u2026';
 
     // dropdown options come from main (kept in sync with settings.js)
@@ -1773,7 +1911,11 @@
             els.settingsAngle.appendChild(opt);
           }
           els.settingsAngle.value = s.angleBackend || 'd3d9';
+          els.settingsSaaKey.value = s.saaApiKey || '';
+          els.settingsSaaCountry.value = s.saaCountry || 'us';
+          settingsAngleAtLoad = els.settingsAngle.value;
           settingsLoaded = true;
+          syncSaveLabel();
         }
       } catch (_) { /* leave dropdown as-is */ }
     }
@@ -1797,31 +1939,56 @@
     settingsSaving = true;
     els.settingsSave.disabled = true;
     els.settingsSave.textContent = 'Saving\u2026';
+    const angleChanged = settingsAngleAtLoad != null &&
+      els.settingsAngle.value !== settingsAngleAtLoad;
     try {
       if (window.fluxAPI && typeof window.fluxAPI.saveSettings === 'function') {
-        await window.fluxAPI.saveSettings({ angleBackend: els.settingsAngle.value });
+        await window.fluxAPI.saveSettings({
+          angleBackend: els.settingsAngle.value,
+          saaApiKey: els.settingsSaaKey.value.trim(),
+          saaCountry: els.settingsSaaCountry.value.trim()
+        });
       }
-      els.settingsSave.textContent = 'Restarting\u2026';
-      if (window.fluxAPI && typeof window.fluxAPI.relaunchApp === 'function') {
+      if (angleChanged && window.fluxAPI && typeof window.fluxAPI.relaunchApp === 'function') {
+        els.settingsSave.textContent = 'Restarting\u2026';
         await window.fluxAPI.relaunchApp();
+        // If relaunch never fires (stubs / failure), restore the button.
+        setTimeout(() => {
+          settingsSaving = false;
+          els.settingsSave.disabled = false;
+          els.settingsSave.textContent = 'Save & Restart';
+        }, 1500);
+        return;
       }
-      // If relaunch never fires (stubs / failure), restore the button.
+      // No ANGLE change: no restart needed — just refresh the home page
+      // (the API key or country may have changed).
+      settingsAngleAtLoad = els.settingsAngle.value;
+      settingsSaving = false;
+      els.settingsSave.disabled = false;
+      els.settingsSave.textContent = 'Saved \u2713';
+      homeLoaded = false;
+      loadHome(true);
       setTimeout(() => {
-        settingsSaving = false;
-        els.settingsSave.disabled = false;
-        els.settingsSave.textContent = 'Save & Restart';
-      }, 1500);
+        closeSettings();
+        syncSaveLabel();
+      }, 650);
     } catch (_) {
       settingsSaving = false;
       els.settingsSave.disabled = false;
-      els.settingsSave.textContent = 'Save & Restart';
+      els.settingsSave.textContent = 'Save';
     }
   }
 
   els.settingsBtn.addEventListener('click', () => { openSettings(); });
   els.settingsClose.addEventListener('click', () => closeSettings());
   els.settingsSave.addEventListener('click', () => { saveAndRestart(); });
+  els.settingsAngle.addEventListener('change', syncSaveLabel);
   els.settingsView.addEventListener('click', (e) => {
     if (e.target === els.settingsView) closeSettings();   // click on backdrop
   });
+
+  // ── Home events + initial load ─────────────────────────────────────────
+  els.homeRetry.addEventListener('click', () => loadHome(true));
+  els.homeSetupBtn.addEventListener('click', () => openSettings());
+  showSearch(els.home);   // app opens straight onto the home page
 })();

@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Flux - streaming app (Electron)",
   "main": "main.js",
   "author": "etb190",
@@ -31,6 +31,7 @@
       "providers3.js",
       "subtitles.js",
       "settings.js",
+      "saa.js",
       "renderer/**",
       "assets/**"
     ],

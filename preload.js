@@ -22,5 +22,7 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   getSettings: () => ipcRenderer.invoke('flux:settings:get'),
   saveSettings: (patch) => ipcRenderer.invoke('flux:settings:set', patch),
   relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
-  getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info')
+  getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
+  // Home page (Streaming Availability API: top 10s, popular per service, new)
+  getHome: () => ipcRenderer.invoke('flux:home')
 });

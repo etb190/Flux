@@ -25,7 +25,11 @@ const ANGLE_BACKENDS = [
 ];
 
 // D3D9 is the out-of-the-box pick (same as choosing it in the browser flag).
-const DEFAULTS = { angleBackend: 'd3d9' };
+// saaApiKey:   Streaming Availability API key (home page data source; free
+//              plan available). Keys starting with "motn-key-" use the
+//              Movie of the Night gateway, others the RapidAPI one.
+// saaCountry:  2-letter country code for the home page catalogs (us, gb, ...).
+const DEFAULTS = { angleBackend: 'd3d9', saaApiKey: '', saaCountry: 'us' };
 
 // settingsVersion 2: v0.9.0 stored 'default' both for "never picked" and for
 // an explicit choice. On migration, a v1 file still on 'default' is treated
@@ -38,6 +42,29 @@ function normalizeBackend(value) {
   return ANGLE_BACKENDS.some((b) => b.value === v) ? v : null;
 }
 
+function normalizeApiKey(value) {
+  const v = String(value == null ? '' : value).trim();
+  return /^[A-Za-z0-9_-]{10,200}$/.test(v) ? v : '';
+}
+
+function normalizeCountry(value) {
+  const v = String(value || '').toLowerCase().trim();
+  return /^[a-z]{2}$/.test(v) ? v : null;
+}
+
+// Apply a settings patch object (already sanitized) onto a settings object.
+function applyPatch(settings, parsed) {
+  if (!parsed || typeof parsed !== 'object') return;
+  const backend = normalizeBackend(parsed.angleBackend);
+  if (backend) settings.angleBackend = backend;
+  if ('saaApiKey' in parsed) {
+    const key = normalizeApiKey(parsed.saaApiKey);
+    settings.saaApiKey = key;
+  }
+  const country = normalizeCountry(parsed.saaCountry);
+  if (country) settings.saaCountry = country;
+}
+
 // Load settings; missing/corrupt file → defaults.
 function loadSettings(file) {
   try {
@@ -47,8 +74,7 @@ function loadSettings(file) {
     let version = 1;
     if (parsed && typeof parsed === 'object') {
       version = Number(parsed.settingsVersion) >= 2 ? 2 : 1;
-      const backend = normalizeBackend(parsed.angleBackend);
-      if (backend) settings.angleBackend = backend;
+      applyPatch(settings, parsed);
     }
     // One-time v1 → v2 migration (see SETTINGS_VERSION above).
     if (version < 2 && settings.angleBackend === 'default') {
@@ -73,12 +99,7 @@ function loadSettings(file) {
 function saveSettings(file, patch) {
   const current = loadSettings(file);
   const next = { ...current };
-  if (patch && typeof patch === 'object') {
-    if ('angleBackend' in patch) {
-      const backend = normalizeBackend(patch.angleBackend);
-      if (backend) next.angleBackend = backend;
-    }
-  }
+  applyPatch(next, patch);
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
@@ -92,4 +113,8 @@ function saveSettings(file, patch) {
   return next;
 }
 
-module.exports = { ANGLE_BACKENDS, DEFAULTS, SETTINGS_VERSION, normalizeBackend, loadSettings, saveSettings };
+module.exports = {
+  ANGLE_BACKENDS, DEFAULTS, SETTINGS_VERSION,
+  normalizeBackend, normalizeApiKey, normalizeCountry,
+  loadSettings, saveSettings
+};
