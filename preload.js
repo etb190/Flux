@@ -17,5 +17,10 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   },
   // Player: header injection / CORS rules for direct stream playback
   setPlayerRules: (rules) => ipcRenderer.invoke('flux:player-rules', rules),
-  clearPlayerRules: () => ipcRenderer.invoke('flux:player-rules:clear')
+  clearPlayerRules: () => ipcRenderer.invoke('flux:player-rules:clear'),
+  // Settings (graphics backend etc.) + relaunch + GPU info
+  getSettings: () => ipcRenderer.invoke('flux:settings:get'),
+  saveSettings: (patch) => ipcRenderer.invoke('flux:settings:set', patch),
+  relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
+  getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info')
 });

@@ -64,7 +64,15 @@
     pcMute: document.getElementById('pc-mute'),
     pcVolIcon: document.getElementById('pc-vol-icon'),
     pcCc: document.getElementById('pc-cc'),
-    pcFs: document.getElementById('pc-fs')
+    pcFs: document.getElementById('pc-fs'),
+
+    // settings overlay
+    settingsBtn: document.getElementById('settings-btn'),
+    settingsView: document.getElementById('settings-view'),
+    settingsAngle: document.getElementById('settings-angle'),
+    settingsGpu: document.getElementById('settings-gpu'),
+    settingsSave: document.getElementById('settings-save'),
+    settingsClose: document.getElementById('settings-close')
   };
 
   let debounceTimer = null;
@@ -105,6 +113,36 @@
   // ── Player chrome auto-hide state (fullscreen, mouse idle) ────────────
   let chromeIdleTimer = null;
   const CHROME_IDLE_MS = 2600;
+
+  // ── Subtitle language whitelist (user setting) ─────────────────────────
+  // Only these five languages are kept: English, French, Italian, Spanish,
+  // Arabic. Everything else (embedded HLS tracks included) is dropped.
+  const SUB_LANG_CODES = {
+    en: 'English', eng: 'English',
+    fr: 'French', fra: 'French', fre: 'French',
+    it: 'Italian', ita: 'Italian',
+    es: 'Spanish', spa: 'Spanish', esp: 'Spanish',
+    ar: 'Arabic', ara: 'Arabic'
+  };
+  const SUB_LANG_NAMES = {
+    english: 'English', french: 'French',
+    italian: 'Italian', spanish: 'Spanish', arabic: 'Arabic'
+  };
+
+  // Match a language name or code ('en', 'eng', 'es-419', 'English') against
+  // the whitelist; returns the canonical English name or null.
+  function subLangLabel(raw) {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return null;
+    const noParen = s.replace(/\s*\([^)]*\)\s*$/, '').trim() || s;
+    for (const cand of [s, noParen]) {
+      if (SUB_LANG_NAMES[cand]) return SUB_LANG_NAMES[cand];
+      if (SUB_LANG_CODES[cand]) return SUB_LANG_CODES[cand];
+    }
+    const m = /^([a-z]{2,3})(?:[-_][a-z0-9]{2,4})?$/.exec(noParen);
+    if (m && SUB_LANG_CODES[m[1]]) return SUB_LANG_CODES[m[1]];
+    return null;
+  }
 
   // ── Subtitle parsing (port of Helix subtitle_parser.dart) ─────────────
   // Cues: {start, end, text} — seconds, text already cleaned.
@@ -979,11 +1017,17 @@
         renderTextTracksNatively: false
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // Embedded WebVTT subtitle tracks → menu (Helix "Embedded" section)
+        // Embedded WebVTT subtitle tracks → menu (Helix "Embedded" section).
+        // Only whitelisted languages are offered (en/fr/it/es/ar).
         try {
-          embeddedSubs = (hls.subtitleTracks || []).map((t) => ({
-            id: t.id, name: t.name || t.lang || 'Track ' + t.id, lang: t.lang
-          }));
+          embeddedSubs = (hls.subtitleTracks || [])
+            .map((t) => ({
+              id: t.id,
+              name: subLangLabel(t.lang) || subLangLabel(t.name) || null,
+              lang: t.lang
+            }))
+            .filter((t) => t.name)
+            .map((t) => ({ id: t.id, name: t.name, lang: t.lang }));
         } catch (_) { embeddedSubs = []; }
         if (!els.playerSubmenu.classList.contains('hidden')) renderSubmenu();
         video.play().catch(() => {});
@@ -1650,9 +1694,13 @@
     }
   });
 
-  // Global Esc: subtitle menu → player → sources → episodes → results
+  // Global Esc: settings → subtitle menu → player → sources → episodes → results
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (!els.settingsView.classList.contains('hidden')) {
+      closeSettings();          // Esc in settings → close just the dialog
+      return;
+    }
     if (!els.playerView.classList.contains('hidden')) {
       if (!els.playerSubmenu.classList.contains('hidden')) {
         closeSubmenu();            // Esc in subtitle menu → close just the menu
@@ -1693,5 +1741,87 @@
   els.sourcesSize.addEventListener('change', () => {
     sourceSizeFilter = els.sourcesSize.value;
     renderSources();
+  });
+
+  // ── Settings (graphics backend etc.) ─────────────────────────────────
+  let settingsLoaded = false;
+  let settingsSaving = false;
+
+  function closeSettings() {
+    els.settingsView.classList.add('hidden');
+  }
+
+  async function openSettings() {
+    els.settingsView.classList.remove('hidden');
+    els.settingsSave.disabled = false;
+    els.settingsSave.textContent = 'Save & Restart';
+    els.settingsGpu.textContent = 'Checking GPU\u2026';
+
+    // dropdown options come from main (kept in sync with settings.js)
+    if (!settingsLoaded && window.fluxAPI && typeof window.fluxAPI.getSettings === 'function') {
+      try {
+        const s = await window.fluxAPI.getSettings();
+        if (s) {
+          const list = Array.isArray(s.backends) && s.backends.length
+            ? s.backends
+            : [{ value: 'default', label: 'Default' }];
+          els.settingsAngle.innerHTML = '';
+          for (const b of list) {
+            const opt = document.createElement('option');
+            opt.value = b.value;
+            opt.textContent = b.label;
+            els.settingsAngle.appendChild(opt);
+          }
+          els.settingsAngle.value = s.angleBackend || 'default';
+          settingsLoaded = true;
+        }
+      } catch (_) { /* leave dropdown as-is */ }
+    }
+
+    if (window.fluxAPI && typeof window.fluxAPI.getGpuInfo === 'function') {
+      try {
+        const gpu = await window.fluxAPI.getGpuInfo();
+        els.settingsGpu.textContent = gpu && gpu.renderer
+          ? 'Active renderer: ' + (gpu.vendor ? gpu.vendor + ' ' : '') + gpu.renderer
+          : 'Active renderer: unavailable';
+      } catch (_) {
+        els.settingsGpu.textContent = 'Active renderer: unavailable';
+      }
+    } else {
+      els.settingsGpu.textContent = 'Active renderer: unavailable';
+    }
+  }
+
+  async function saveAndRestart() {
+    if (settingsSaving) return;
+    settingsSaving = true;
+    els.settingsSave.disabled = true;
+    els.settingsSave.textContent = 'Saving\u2026';
+    try {
+      if (window.fluxAPI && typeof window.fluxAPI.saveSettings === 'function') {
+        await window.fluxAPI.saveSettings({ angleBackend: els.settingsAngle.value });
+      }
+      els.settingsSave.textContent = 'Restarting\u2026';
+      if (window.fluxAPI && typeof window.fluxAPI.relaunchApp === 'function') {
+        await window.fluxAPI.relaunchApp();
+      }
+      // If relaunch never fires (stubs / failure), restore the button.
+      setTimeout(() => {
+        settingsSaving = false;
+        els.settingsSave.disabled = false;
+        els.settingsSave.textContent = 'Save & Restart';
+      }, 1500);
+    } catch (_) {
+      settingsSaving = false;
+      els.settingsSave.disabled = false;
+      els.settingsSave.textContent = 'Save & Restart';
+    }
+  }
+
+  els.settingsBtn.addEventListener('click', () => { openSettings(); });
+  els.settingsClose.addEventListener('click', () => closeSettings());
+  els.settingsSave.addEventListener('click', () => { saveAndRestart(); });
+  els.settingsView.addEventListener('click', (e) => {
+    if (e.target === els.settingsView) closeSettings();   // click on backdrop
   });
 })();

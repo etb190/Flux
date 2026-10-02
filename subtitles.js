@@ -54,6 +54,56 @@ function langName(raw) {
   return LANG_NAMES[key] || (key.length <= 3 ? key.toUpperCase() : key);
 }
 
+// ── Subtitle language whitelist (user request) ─────────────────────────
+// Only these languages are kept: English, French, Italian, Spanish, Arabic.
+// Everything else (including regional variants like pt-BR) is filtered out
+// before results reach the player menu.
+const SUB_ALLOWED_CODES = new Set(['en', 'fr', 'it', 'es', 'ar']);
+
+// language display name (lowercased) → shortest (iso2) code, e.g. 'english' → 'en'
+const NAME_TO_CODE = {};
+for (const [code, name] of Object.entries(LANG_NAMES)) {
+  const key = name.toLowerCase();
+  if (NAME_TO_CODE[key] == null || code.length < NAME_TO_CODE[key].length) {
+    NAME_TO_CODE[key] = code;
+  }
+}
+
+// Normalize a language given as a name or code to its base iso2 code:
+// 'English'/'eng'/'en'/'en-US' → 'en', 'Portuguese (BR)' → 'pt',
+// unknown names/codes → null. (Also used to canonicalize display names.)
+function subLangCode(raw) {
+  const s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return null;
+  const noParen = s.replace(/\s*\([^)]*\)\s*$/, '').trim() || s;
+  // base language first, so 'Portuguese (BR)' resolves to 'pt' not 'pb'
+  for (const cand of [noParen, s]) {
+    if (LANG_NAMES[cand]) return NAME_TO_CODE[LANG_NAMES[cand].toLowerCase()] || cand;
+    if (NAME_TO_CODE[cand]) return NAME_TO_CODE[cand];
+  }
+  const m = /^([a-z]{2,3})(?:[-_][a-z0-9]{2,4})?$/.exec(noParen);
+  if (m) {
+    const base = m[1];
+    if (LANG_NAMES[base]) return NAME_TO_CODE[LANG_NAMES[base]] || base;
+    if (base.length === 2) return base;
+  }
+  return null;
+}
+
+// Keep only whitelisted languages; canonicalizes the display name so
+// 'eng', 'en-US' and 'English' all collapse into one 'English' group.
+function filterLangVariants(variants) {
+  const out = [];
+  for (const v of variants || []) {
+    if (!v) continue;
+    const code = subLangCode(v.language);
+    if (!code || !SUB_ALLOWED_CODES.has(code)) continue;
+    const canonical = LANG_NAMES[code];
+    out.push(v.language === canonical ? v : Object.assign({}, v, { language: canonical }));
+  }
+  return out;
+}
+
 // ── SubtitleCat Google translation engine (Helix SubtitleCatService) ──────
 const srtTranslateCache = new Map();   // "origUrl|lang" -> srt text
 const srtTranslateInflight = new Map();
@@ -697,7 +747,8 @@ async function searchSubtitles(params, { onBatch, onDone } = {}) {
 
   await Promise.all(providers.map(async (p) => {
     try {
-      const variants = await timeoutWrap(p.fn(params || {}), p.timeout, p.name);
+      const found = await timeoutWrap(p.fn(params || {}), p.timeout, p.name);
+      const variants = filterLangVariants(found);   // keep en/fr/it/es/ar only
       if (variants.length && onBatch) {
         total += variants.length;
         onBatch(variants, p.name);
@@ -883,5 +934,8 @@ module.exports = {
   translateSrt,
   zipExtractSubtitle,
   decodeSubtitleBytes,
-  langName
+  langName,
+  subLangCode,
+  filterLangVariants,
+  SUB_ALLOWED_CODES
 };

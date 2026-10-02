@@ -3,6 +3,19 @@ const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
 const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtitles.js');
+const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
+
+// ── Graphics backend (same choice as brave://flags/#use-angle) ───────────
+// Must be applied BEFORE app ready. Saved in userData/flux-settings.json.
+const settingsFile = () => path.join(app.getPath('userData'), 'flux-settings.json');
+
+(() => {
+  const saved = loadSettings(settingsFile());
+  if (saved.angleBackend && saved.angleBackend !== 'default') {
+    app.commandLine.appendSwitch('use-angle', saved.angleBackend);
+    console.log('[Flux] ANGLE graphics backend: ' + saved.angleBackend);
+  }
+})();
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -182,6 +195,36 @@ ipcMain.handle('flux:player-rules', (_event, rules) => {
 ipcMain.handle('flux:player-rules:clear', () => {
   playerRules = { headers: [], corsHosts: [] };
   return true;
+});
+
+// ── IPC: app settings (graphics backend etc.) ────────────────────────────
+ipcMain.handle('flux:settings:get', () => ({
+  ...loadSettings(settingsFile()),
+  backends: ANGLE_BACKENDS
+}));
+
+ipcMain.handle('flux:settings:set', (_event, patch) => saveSettings(settingsFile(), patch));
+
+ipcMain.handle('flux:app:relaunch', () => {
+  app.relaunch();
+  app.exit(0);
+  return true;
+});
+
+// IPC: GPU info for the settings panel (which renderer is actually active)
+ipcMain.handle('flux:gpu:info', async () => {
+  try {
+    const info = await app.getGPUInfo('basic');
+    const devs = info && (info.gpuDevice ?? info.devices);
+    const arr = Array.isArray(devs) ? devs : devs ? [devs] : [];
+    const active = arr.find((d) => d && d.active) || arr[0] || null;
+    return {
+      renderer: active && active.renderer ? String(active.renderer) : null,
+      vendor: active && active.vendor ? String(active.vendor) : null
+    };
+  } catch (_) {
+    return { renderer: null, vendor: null };
+  }
 });
 
 app.whenReady().then(() => {
