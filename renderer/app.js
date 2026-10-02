@@ -23,6 +23,7 @@
     heroMeta: document.getElementById('hero-meta'),
     heroOverview: document.getElementById('hero-overview'),
     homeRows: document.getElementById('home-rows'),
+    homeNotice: document.getElementById('home-notice'),
     loading: document.getElementById('loading'),
     error: document.getElementById('error'),
     errorMsg: document.getElementById('error-msg'),
@@ -489,6 +490,12 @@
 
   function renderHome(data) {
     renderHero(data.hero);
+    if (data.notice && els.homeNotice) {
+      els.homeNotice.textContent = data.notice;
+      els.homeNotice.classList.remove('hidden');
+    } else if (els.homeNotice) {
+      els.homeNotice.classList.add('hidden');
+    }
     els.homeRows.innerHTML = '';
     for (const row of data.rows || []) {
       if (!row.items || !row.items.length) continue;
@@ -1437,6 +1444,13 @@
       fb.className = 'poster-fallback';
       fb.textContent = '\uD83C\uDFAC';
       wrap.appendChild(fb);
+    }
+
+    if (item.rank) {
+      const rank = document.createElement('span');
+      rank.className = 'rank-badge';
+      rank.textContent = String(item.rank);
+      wrap.appendChild(rank);
     }
 
     if (item.imdbRating && item.imdbRating !== 'null') {

@@ -1,6 +1,6 @@
 // ── Flux TMDB helper: IMDb → TMDB ID resolution (port of Helix
 //    lib/services/scraper/sites/tmdb_helper.dart, 1:1) ────────────────────
-const TMDB_API_KEY = 'b3556f3b206e16f82df4d1f6fd4545e6';
+const TMDB_API_KEY = '19d475b19a2a345b560687918d8ee98b';
 const TMDB_DIRECT = 'https://api.themoviedb.org/3';
 const TMDB_PROXY = 'https://db.speedracelight.com/3';
 

@@ -167,6 +167,9 @@ function mapShow(show, country) {
   if (!show || !show.imdbId) return null;   // Cinemeta details need an IMDb id
   const poster = pickPoster(show.imageSet);
   if (!poster) return null;                 // cards without art look broken
+  // SA ratings are integers on a 0-100 scale (e.g. 60 → IMDb 6.0).
+  const rating = Number(show.rating);
+  const imdbRating = rating > 0 ? (rating / 10).toFixed(1) : null;
   return {
     id: String(show.imdbId),
     name: String(show.title || show.originalTitle || 'Unknown'),
@@ -174,7 +177,7 @@ function mapShow(show, country) {
     backdrop: pickBackdrop(show.imageSet),
     year: String(show.releaseYear || show.firstAirYear || show.lastAirYear || ''),
     type: show.showType === 'series' ? 'series' : 'movie',
-    imdbRating: show.rating != null ? String(show.rating) : null,
+    imdbRating,
     overview: String(show.overview || ''),
     genres: (Array.isArray(show.genres) ? show.genres : [])
       .map((g) => (g && (g.name || g.shortName)) || '')
@@ -198,12 +201,40 @@ function mapList(raw, country, cap) {
   return out;
 }
 
+// /changes returns `shows` as a map keyed by show id, plus a `changes` array
+// (the events, ordered by change date). Rebuild the show list in that event
+// order, deduped, so "New This Week" reads newest-first.
+function showsFromChanges(data) {
+  const map = (data && data.shows) || {};
+  const changes = Array.isArray(data && data.changes) ? data.changes : [];
+  const ordered = [];
+  const seen = new Set();
+  for (const ch of changes) {
+    const id = ch && ch.showId;
+    if (id && map[id] && !seen.has(id)) {
+      seen.add(id);
+      ordered.push(map[id]);
+    }
+  }
+  // Defensive: any show not referenced by a change event goes last.
+  for (const [id, show] of Object.entries(map)) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ordered.push(show);
+    }
+  }
+  return ordered;
+}
+
 // ── Row fetchers (all hit the v4 endpoints) ──────────────────────────────
 async function fetchTop(gw, country, service, showType, dir) {
   const params = { country, service, show_type: showType || '' };
   const { data } = await cachedGet(dir, '/shows/top?' + JSON.stringify(params),
     () => apiGet(gw, '/shows/top', params));
-  return mapList(data, country, 10);
+  const items = mapList(data, country, 10);
+  // Official Top 10s are rank-ordered → expose the rank for the UI badge.
+  items.forEach((item, i) => { item.rank = i + 1; });
+  return items;
 }
 
 async function fetchPopular(gw, country, catalog, dir) {
@@ -219,10 +250,15 @@ async function fetchPopular(gw, country, catalog, dir) {
 }
 
 async function fetchChanges(gw, country, changeType, dir) {
-  const params = { country, change_type: changeType, item_type: 'show' };
+  const params = {
+    country,
+    change_type: changeType,
+    item_type: 'show',
+    order_direction: 'desc'          // newest change first
+  };
   const { data } = await cachedGet(dir, '/changes?' + JSON.stringify(params),
     () => apiGet(gw, '/changes', params));
-  return mapList(data && data.shows, country, ROW_CAP);
+  return mapList(showsFromChanges(data), country, ROW_CAP);
 }
 
 // ── Home payload ──────────────────────────────────────────────────────────
@@ -246,7 +282,9 @@ async function getHomeData(key, country, opts) {
     { key: 'disney', title: 'Popular on Disney+',
       fn: () => fetchPopular(gw, c, 'disney', dir) },
     { key: 'new', title: 'New This Week',
-      fn: () => fetchChanges(gw, c, 'new', dir) }
+      fn: () => fetchChanges(gw, c, 'new', dir) },
+    { key: 'leaving', title: 'Leaving Soon',
+      fn: () => fetchChanges(gw, c, 'expiring', dir) }
   ];
 
   const settled = await Promise.allSettled(defs.map((d) => d.fn()));
@@ -283,6 +321,6 @@ function _setFetcher(fn) { fetchImpl = fn; }
 
 module.exports = {
   DEFAULT_COUNTRY, CACHE_TTL_MS, SERVICE_NAMES,
-  gatewayFor, getHomeData, mapShow, mapList, serviceLabel,
+  gatewayFor, getHomeData, mapShow, mapList, showsFromChanges, serviceLabel,
   pickPoster, pickBackdrop, _setFetcher
 };

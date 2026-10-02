@@ -59,11 +59,12 @@
         <div class="home-card">
           <h2>Set up the home page</h2>
           <p>
-            The home page is filled by the free Streaming Availability API
-            (daily Top&nbsp;10 lists, popular titles per service, new releases).
-            Grab an instant free key at
-            <a href="https://developers.movieofthenight.com" title="Get a free API key">developers.movieofthenight.com</a>,
-            then paste it in Settings.
+            The home page mixes the Streaming Availability API (daily
+            Top&nbsp;10 lists, popular titles per service, new &amp; leaving
+            soon) with TMDB trending. Flux ships with a working key, so you
+            only see this if the key was cleared — paste your own (free at
+            <a href="https://developers.movieofthenight.com" title="Get a free API key">developers.movieofthenight.com</a>)
+            in Settings.
           </p>
           <button id="home-setup-btn" class="home-btn">Open Settings</button>
           <p class="home-note">Search keeps working without a key.</p>
@@ -89,8 +90,13 @@
             <p id="hero-overview" class="hero-overview"></p>
           </div>
         </section>
+        <p id="home-notice" class="home-notice hidden"></p>
         <div id="home-rows"></div>
-        <p class="home-attribution">Home data by the Streaming Availability API (Movie of the Night)</p>
+        <p class="home-attribution">
+          Home data by the Streaming Availability API (Movie of the Night)
+          &middot; Trending by TMDB. This product uses the TMDB API but is not
+          endorsed or certified by TMDB.
+        </p>
       </div>
     </section>
 
@@ -201,9 +207,11 @@
         <input id="settings-saa-key" class="settings-input" type="password"
                placeholder="motn-key-... or RapidAPI key" autocomplete="off" spellcheck="false" />
         <p class="settings-hint">
-          Fills the home page (daily Top&nbsp;10s, popular per service, new
-          releases). Get an instant free key at
-          <a href="https://developers.movieofthenight.com">developers.movieofthenight.com</a>.
+          Fills the home page service rows (daily Top&nbsp;10s, popular per
+          service, new &amp; leaving soon). A working key ships built in —
+          replace it with your own free key from
+          <a href="https://developers.movieofthenight.com">developers.movieofthenight.com</a>
+          if it runs out of quota. Trending comes from TMDB separately.
         </p>
         <label class="settings-label" for="settings-saa-country">Country (home catalogs)</label>
         <input id="settings-saa-country" class="settings-input settings-input-sm" type="text"

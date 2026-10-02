@@ -25,17 +25,28 @@ const ANGLE_BACKENDS = [
 ];
 
 // D3D9 is the out-of-the-box pick (same as choosing it in the browser flag).
-// saaApiKey:   Streaming Availability API key (home page data source; free
-//              plan available). Keys starting with "motn-key-" use the
-//              Movie of the Night gateway, others the RapidAPI one.
+// saaApiKey:   Streaming Availability API key for the home page (a working
+//              free-tier key ships built in so the home page works out of
+//              the box; users can swap in their own via Settings). Keys
+//              starting with "motn-key-" use the Movie of the Night gateway,
+//              others the RapidAPI one.
 // saaCountry:  2-letter country code for the home page catalogs (us, gb, ...).
-const DEFAULTS = { angleBackend: 'd3d9', saaApiKey: '', saaCountry: 'us' };
+const DEFAULTS = {
+  angleBackend: 'd3d9',
+  saaApiKey: 'motn-key-v4-dy95VsCjpM1RaqoZkgrvJjUYtPw3o598',
+  saaCountry: 'us'
+};
 
 // settingsVersion 2: v0.9.0 stored 'default' both for "never picked" and for
 // an explicit choice. On migration, a v1 file still on 'default' is treated
 // as never-picked and upgraded to the new D3D9 pick; files already at v2
 // keep an explicit 'Default' selection untouched.
-const SETTINGS_VERSION = 2;
+//
+// settingsVersion 3: the Streaming Availability API key is now built in
+// (DEFAULTS above). Files older than v3 that saved an empty saaApiKey are
+// upgraded to the built-in key; v3+ files with an explicitly cleared key
+// (Settings → empty field → Save) keep it empty.
+const SETTINGS_VERSION = 3;
 
 function normalizeBackend(value) {
   const v = String(value || '').toLowerCase().trim();
@@ -73,12 +84,25 @@ function loadSettings(file) {
     const settings = { ...DEFAULTS };
     let version = 1;
     if (parsed && typeof parsed === 'object') {
-      version = Number(parsed.settingsVersion) >= 2 ? 2 : 1;
+      const v = Number(parsed.settingsVersion);
+      version = Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
       applyPatch(settings, parsed);
     }
-    // One-time v1 → v2 migration (see SETTINGS_VERSION above).
-    if (version < 2 && settings.angleBackend === 'default') {
-      settings.angleBackend = DEFAULTS.angleBackend;
+
+    // One-time migrations (see SETTINGS_VERSION above).
+    const needsWrite =
+      // v1 → v2: 'default' ANGLE backend means "never picked" → D3D9.
+      (version < 2 && settings.angleBackend === 'default') ||
+      // pre-v3 → v3: empty SA key gets the new built-in key.
+      (version < 3 && !settings.saaApiKey);
+
+    if (needsWrite) {
+      if (version < 2 && settings.angleBackend === 'default') {
+        settings.angleBackend = DEFAULTS.angleBackend;
+      }
+      if (version < 3 && !settings.saaApiKey) {
+        settings.saaApiKey = DEFAULTS.saaApiKey;
+      }
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(
