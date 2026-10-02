@@ -6,6 +6,17 @@ const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtit
 const home = require('./home.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
 
+// ── Squirrel (Windows installer lifecycle) ──────────────────────────────
+// When Flux is installed/updated/uninstalled by Squirrel.Windows it is
+// launched with --squirrel-install / --squirrel-updated / --squirrel-uninstall
+// / --squirrel-firstrun args. electron-squirrel-startup handles those events
+// (shortcuts, uninstaller entry, etc.) and returns true — in that case the
+// app must quit immediately instead of opening a window.
+const squirrelStartup = require('electron-squirrel-startup');
+if (squirrelStartup) {
+  app.quit();
+}
+
 // ── Graphics backend (same choice as brave://flags/#use-angle) ───────────
 // Must be applied BEFORE app ready. Saved in userData/flux-settings.json.
 const settingsFile = () => path.join(app.getPath('userData'), 'flux-settings.json');
@@ -28,9 +39,9 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false,
     title: 'Flux',
-    icon: path.join(__dirname, 'assets', 'icon.png'),
+    icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -39,7 +50,13 @@ function createWindow() {
   });
 
   win.once('ready-to-show', () => win.show());
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+
+  // Vite dev server (HMR) in development, built output in production.
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
+    win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  } else {
+    win.loadFile(path.join(__dirname, '../renderer/index.html'));
+  }
 }
 
 // ── IPC: search movies + series in parallel (Helix pattern) ──────────────
@@ -243,6 +260,7 @@ ipcMain.handle('flux:gpu:info', async () => {
 });
 
 app.whenReady().then(() => {
+  if (squirrelStartup) return;   // Squirrel event run — no UI
   installPlayerInterceptors();
   createWindow();
   app.on('activate', () => {

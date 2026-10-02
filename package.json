@@ -1,18 +1,33 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.11.0",
-  "description": "Flux - streaming app (Electron)",
-  "main": "main.js",
+  "version": "0.12.0",
+  "description": "Flux - streaming app (Electron + React + Vite)",
+  "main": "./out/main/index.js",
   "author": "etb190",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
-    "dist:win": "electron-builder --win"
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
+    "hls.js": "^1.7.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "tailwindcss": "^4.1.8",
+    "vite": "^5.4.11"
   },
   "build": {
     "appId": "com.etb190.flux",
@@ -21,29 +36,17 @@
       "output": "dist"
     },
     "files": [
-      "main.js",
-      "preload.js",
-      "search.js",
-      "streams.js",
-      "tmdb.js",
-      "http.js",
-      "providers2.js",
-      "providers3.js",
-      "subtitles.js",
-      "settings.js",
-      "saa.js",
-      "renderer/**",
+      "out/**",
       "assets/**"
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "squirrel",
+          "arch": ["x64"]
+        }
       ],
       "icon": "assets/icon.png"
     }
-  },
-  "dependencies": {
-    "hls.js": "^1.7.3"
   }
 }

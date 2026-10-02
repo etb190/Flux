@@ -147,13 +147,17 @@ function pickBackdrop(imageSet) {
 function serviceLabel(id) { return SERVICE_NAMES[id] || id; }
 
 // streamingOptions: { "<COUNTRY>": [{service, link, type, quality, ...}] }
+// `service` is usually the string id ("netflix") but the API also returns a
+// full service object {id, name, homePage, themeColorCode, imageSet} —
+// normalize both (a raw object leaking into the renderer crashes React).
 function mapServices(show, country) {
   const optsByCc = show && show.streamingOptions ? show.streamingOptions : {};
   const opts = optsByCc[country.toUpperCase()] || optsByCc[country.toLowerCase()] || [];
   const seen = new Set();
   const out = [];
   for (const o of opts) {
-    const id = o && o.service;
+    const raw = o && o.service;
+    const id = typeof raw === 'string' ? raw : (raw && raw.id) || '';
     if (!id || seen.has(id)) continue;
     seen.add(id);
     out.push({ id, name: serviceLabel(id), type: o.type || 'sub', link: o.link || '' });
