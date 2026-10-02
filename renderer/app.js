@@ -22,7 +22,14 @@
     backBtn: document.getElementById('back-btn'),
     detailsLoading: document.getElementById('details-loading'),
     detailsError: document.getElementById('details-error'),
-    detailsContent: document.getElementById('details-content')
+    detailsContent: document.getElementById('details-content'),
+    sourcesView: document.getElementById('sources-view'),
+    sourcesTitle: document.getElementById('sources-title'),
+    sourcesSub: document.getElementById('sources-sub'),
+    sourcesStatus: document.getElementById('sources-status'),
+    providerChips: document.getElementById('provider-chips'),
+    sourcesEmpty: document.getElementById('sources-empty'),
+    sourcesList: document.getElementById('sources-list')
   };
 
   let debounceTimer = null;
@@ -31,6 +38,9 @@
   let seasonTabs = [];        // [{label, episodes}] for the open title
   let currentTab = 0;
   let resultsScrollTop = 0;   // restored when going back from details
+  let currentMeta = null;     // meta of the open title
+  let streamsRequestId = null; // active sources scan (null = none)
+  let providerRowEls = {};     // provider name -> chip element
 
   // ── Data layer ────────────────────────────────────────────────────────
   // In Electron, network calls run in the main process (no CORS,
@@ -130,7 +140,7 @@
   const searchSections = () =>
     [els.welcome, els.loading, els.error, els.empty, els.resultsWrap];
   const detailsSections = () =>
-    [els.detailsLoading, els.detailsError, els.detailsContent];
+    [els.detailsLoading, els.detailsError, els.detailsContent, els.sourcesView];
 
   function showSearch(section) {
     els.details.classList.add('hidden');
@@ -147,6 +157,209 @@
 
   // Kept for the search flow (used by runSearch / scheduleSearch)
   const show = (section) => showSearch(section);
+
+  // ── Sources scan (episode click) ───────────────────────────────────────
+  function stopScan() {
+    if (streamsRequestId != null) {
+      streamsRequestId = null;
+      if (window.fluxAPI && typeof window.fluxAPI.cancelStreams === 'function') {
+        window.fluxAPI.cancelStreams();
+      }
+    }
+  }
+
+  function setChipStatus(name, status, count) {
+    const chip = providerRowEls[name];
+    if (!chip) return;
+    const dot = chip.querySelector('.pchip-dot');
+    const label = chip.querySelector('.pchip-status');
+    chip.classList.remove('scanning', 'ok', 'empty', 'error');
+    if (status === 'scanning') {
+      chip.classList.add('scanning');
+      label.textContent = '…';
+    } else if (status === 'ok') {
+      chip.classList.add('ok');
+      label.textContent = String(count);
+    } else if (status === 'empty') {
+      chip.classList.add('empty');
+      label.textContent = '0';
+    } else {
+      chip.classList.add('error');
+      label.textContent = '!';
+    }
+    if (dot) dot.textContent = status === 'ok' ? '\u2713' : (status === 'error' ? '\u00d7' : '·');
+  }
+
+  function makeSourceRow(src) {
+    const row = document.createElement('div');
+    row.className = 'source-row' + (src.format === 'Embed' ? ' embed' : '');
+
+    const icon = document.createElement('div');
+    icon.className = 'source-icon';
+    icon.textContent = (src.provider || '?').charAt(0).toUpperCase();
+    row.appendChild(icon);
+
+    const info = document.createElement('div');
+    info.className = 'source-info';
+
+    const line = document.createElement('div');
+    line.className = 'source-line';
+
+    const name = document.createElement('span');
+    name.className = 'source-name';
+    name.textContent = src.title || src.provider || 'Source';
+    line.appendChild(name);
+
+    const format = document.createElement('span');
+    format.className = 'source-format' +
+      (src.format === 'Embed' ? ' f-embed' : src.format === 'HLS' ? ' f-hls' : src.format === 'DASH' ? ' f-dash' : ' f-mp4');
+    format.textContent = src.format || 'LINK';
+    line.appendChild(format);
+
+    if (src.quality) {
+      const q = document.createElement('span');
+      q.className = 'source-quality';
+      q.textContent = src.quality;
+      line.appendChild(q);
+    }
+    info.appendChild(line);
+
+    let host = '';
+    try { host = new URL(src.url).hostname.replace(/^www\./, ''); } catch (_) {}
+    const desc = document.createElement('div');
+    desc.className = 'source-desc';
+    desc.textContent = [src.description, host].filter(Boolean).join(' \u00b7 ');
+    info.appendChild(desc);
+
+    row.appendChild(info);
+
+    const play = document.createElement('div');
+    play.className = 'source-play';
+    play.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+    row.appendChild(play);
+
+    return row;
+  }
+
+  function appendSource(src) {
+    els.sourcesEmpty.classList.add('hidden');
+    const row = makeSourceRow(src);
+    // Direct links first, embeds pinned below them
+    if (src.format === 'Embed') {
+      els.sourcesList.appendChild(row);
+    } else {
+      const firstEmbed = els.sourcesList.querySelector('.source-row.embed');
+      if (firstEmbed) els.sourcesList.insertBefore(row, firstEmbed);
+      else els.sourcesList.appendChild(row);
+    }
+  }
+
+  function updateSourcesStatus(text) {
+    els.sourcesStatus.textContent = text;
+  }
+
+  function handleStreamsEvent(evt) {
+    // The main process streams events before the invoke() reply lands here,
+    // so while 'pending' we adopt the requestId of the first init event.
+    if (streamsRequestId === 'pending') {
+      if (evt.kind !== 'init' || evt.requestId == null) return;
+      streamsRequestId = evt.requestId;
+    } else if (streamsRequestId == null || evt.requestId !== streamsRequestId) {
+      return;
+    }
+
+    if (evt.kind === 'init') {
+      els.providerChips.innerHTML = '';
+      providerRowEls = {};
+      for (const name of evt.providers) {
+        const chip = document.createElement('div');
+        chip.className = 'pchip scanning';
+
+        const dot = document.createElement('span');
+        dot.className = 'pchip-dot';
+        dot.textContent = '\u00b7';
+
+        const nm = document.createElement('span');
+        nm.className = 'pchip-name';
+        nm.textContent = name;
+
+        const st = document.createElement('span');
+        st.className = 'pchip-status';
+        st.textContent = '\u2026';
+
+        chip.appendChild(dot);
+        chip.appendChild(nm);
+        chip.appendChild(st);
+        els.providerChips.appendChild(chip);
+        providerRowEls[name] = chip;
+      }
+      updateSourcesStatus('Scanning ' + evt.providers.length + ' providers\u2026');
+      return;
+    }
+
+    if (evt.kind === 'provider') {
+      setChipStatus(evt.provider, evt.status, evt.count);
+      for (const src of evt.sources || []) appendSource(src);
+      return;
+    }
+
+    if (evt.kind === 'done') {
+      streamsRequestId = null;          // scan finished
+      const direct = evt.directCount || 0;
+      const embeds = evt.embedCount || 0;
+      if (direct + embeds === 0) {
+        els.sourcesEmpty.classList.remove('hidden');
+        updateSourcesStatus('Scan complete \u2014 no sources found');
+      } else {
+        const parts = [];
+        if (direct) parts.push(direct + (direct === 1 ? ' direct link' : ' direct links'));
+        if (embeds) parts.push(embeds + (embeds === 1 ? ' embed player' : ' embed players'));
+        updateSourcesStatus('Scan complete \u2014 ' + parts.join(', '));
+      }
+    }
+  }
+
+  async function openSources(ep) {
+    if (!currentMeta) return;
+    showDetails(els.sourcesView);
+    els.sourcesList.innerHTML = '';
+    els.sourcesEmpty.classList.add('hidden');
+    els.providerChips.innerHTML = '';
+    providerRowEls = {};
+    els.sourcesTitle.textContent =
+      'S' + (ep.season ?? 1) + ' E' + (ep.episode ?? 1) + ' \u00b7 ' + ep.title;
+    els.sourcesSub.textContent = currentMeta.name;
+    updateSourcesStatus('Contacting providers\u2026');
+
+    stopScan();
+    try {
+      streamsRequestId = 'pending';    // adopt requestId from the init event
+      const res = await window.fluxAPI.getStreams({
+        type: currentMeta.type,
+        imdbId: currentMeta.id,
+        title: currentMeta.name,
+        year: currentMeta.year,
+        season: ep.season ?? 1,
+        episode: ep.episode ?? 1
+      });
+      if (streamsRequestId === 'pending' && res && res.requestId != null) {
+        streamsRequestId = res.requestId;  // fallback if init raced past us
+      }
+    } catch (_) {
+      if (streamsRequestId === 'pending') streamsRequestId = null;
+      updateSourcesStatus('Could not start the scan.');
+    }
+  }
+
+  function closeSources() {
+    stopScan();
+    showDetails(els.detailsContent);
+    els.content.scrollTop = 0;
+  }
+
+  if (window.fluxAPI && typeof window.fluxAPI.onStreamsProgress === 'function') {
+    window.fluxAPI.onStreamsProgress(handleStreamsEvent);
+  }
 
   // ── Search rendering ──────────────────────────────────────────────────
   function renderResults(query, items) {
@@ -321,7 +534,9 @@
 
     for (const ep of tab.episodes) {
       const rowEl = document.createElement('div');
-      rowEl.className = 'episode-row';
+      rowEl.className = 'episode-row clickable';
+      rowEl.title = 'Find sources for this episode';
+      rowEl.addEventListener('click', () => openSources(ep));
 
       rowEl.appendChild(makeThumb(
         ep.thumbnail, ep.title,
@@ -359,6 +574,12 @@
       info.appendChild(overview);
 
       rowEl.appendChild(info);
+
+      const chev = document.createElement('div');
+      chev.className = 'ep-chev';
+      chev.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+      rowEl.appendChild(chev);
+
       list.appendChild(rowEl);
     }
 
@@ -366,6 +587,7 @@
   }
 
   function renderDetails(meta) {
+    currentMeta = meta;
     els.detailsContent.innerHTML = '';
     els.detailsContent.scrollTop = 0;
 
@@ -473,6 +695,8 @@
   // ── Details orchestration ─────────────────────────────────────────────
   async function openDetails(item) {
     const seq = ++detailsSeq;
+    currentMeta = null;
+    stopScan();
     resultsScrollTop = els.content.scrollTop;
     showDetails(els.detailsLoading);
     els.content.scrollTop = 0;
@@ -490,6 +714,7 @@
 
   function closeDetails() {
     detailsSeq++;                          // invalidate in-flight loads
+    stopScan();
     showSearch(els.resultsWrap);
     els.content.scrollTop = resultsScrollTop;
   }
@@ -498,6 +723,7 @@
   async function runSearch(query) {
     const seq = ++searchSeq;
     detailsSeq++;                          // close/invalidate details view
+    stopScan();
     showSearch(els.loading);
     try {
       const items = await doSearch(query);
@@ -536,7 +762,11 @@
       if (q) runSearch(q);
     } else if (e.key === 'Escape') {
       if (!els.details.classList.contains('hidden')) {
-        closeDetails();                    // Esc in details → back to results
+        if (!els.sourcesView.classList.contains('hidden')) {
+          closeSources();                  // Esc in sources → back to episodes
+        } else {
+          closeDetails();                  // Esc in details → back to results
+        }
         return;
       }
       els.input.value = '';
@@ -550,5 +780,8 @@
     els.input.focus();
   });
 
-  els.backBtn.addEventListener('click', closeDetails);
+  els.backBtn.addEventListener('click', () => {
+    if (!els.sourcesView.classList.contains('hidden')) closeSources();
+    else closeDetails();
+  });
 })();
