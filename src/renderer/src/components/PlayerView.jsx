@@ -14,7 +14,7 @@ import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import SubtitleMenu from './SubtitleMenu.jsx';
 import { fmtDelay } from '../lib/format.js';
-import { BackIcon, SwitchIcon } from './icons.jsx';
+import { BackIcon, SwitchIcon, WinMinimizeIcon, WinMaximizeIcon, WinRestoreIcon, WinCloseIcon } from './icons.jsx';
 
 const CHROME_IDLE_MS = 2600;
 
@@ -52,6 +52,62 @@ function fsSvg() {
 
 function hostOf(url) {
   try { return new URL(url).hostname; } catch (_err) { return ''; }
+}
+
+/* ── Window controls in the player top bar (frameless chrome) ─────────────
+ * The custom title bar sits behind the player overlay while watching, so
+ * the same minimize / maximize-restore / close buttons live at the right
+ * end of the player top bar (right of "Change source"). Mirrors TitleBar's
+ * maximize-restore state; the bar itself is the drag region, buttons opt
+ * out via app-no-drag. Negative margins let the buttons run edge-to-edge
+ * (flush top/right/bottom) like a real title bar.
+ */
+function PlayerWindowControls() {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    const api = window.fluxAPI;
+    if (!api) return undefined;
+    if (typeof api.winIsMaximized === 'function') {
+      Promise.resolve(api.winIsMaximized())
+        .then((v) => setMaximized(Boolean(v)))
+        .catch(() => {});
+    }
+    // onWinState returns an unsubscribe (player remounts per playback).
+    const un = typeof api.onWinState === 'function'
+      ? api.onWinState(({ maximized: m }) => setMaximized(Boolean(m)))
+      : null;
+    return () => { if (typeof un === 'function') un(); };
+  }, []);
+
+  const btn = (label, testid, onClick, cls) => (
+    <button
+      data-testid={testid}
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={'app-no-drag w-11 flex items-center justify-center text-[#c7c7c7] transition-colors ' + cls}
+    >
+      {testid === 'pwin-min' ? <WinMinimizeIcon size={13} />
+        : testid === 'pwin-max' ? (maximized ? <WinRestoreIcon size={13} /> : <WinMaximizeIcon size={13} />)
+          : <WinCloseIcon size={13} />}
+    </button>
+  );
+
+  return (
+    <div
+      data-testid="player-win-controls"
+      className="self-stretch flex items-stretch -my-3 -mr-5"
+    >
+      {btn('Minimize', 'pwin-min', () => window.fluxAPI?.winMinimize?.(),
+        'hover:bg-white/10 hover:text-white')}
+      {btn(maximized ? 'Restore' : 'Maximize', 'pwin-max',
+        () => window.fluxAPI?.winMaximize?.(),
+        'hover:bg-white/10 hover:text-white')}
+      {btn('Close', 'pwin-close', () => window.fluxAPI?.winClose?.(),
+        'hover:bg-[#e50914] hover:text-white')}
+    </div>
+  );
 }
 
 // Register Referer/UA injection + CORS passthrough for this playback.
@@ -676,6 +732,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           <SwitchIcon />
           <span>Change source</span>
         </button>
+        <PlayerWindowControls />
       </div>
 
       {/* stage — the fullscreen target, holds the player AND the overlays */}

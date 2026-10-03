@@ -50,7 +50,10 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   winClose: () => ipcRenderer.invoke('flux:win:close'),
   winIsMaximized: () => ipcRenderer.invoke('flux:win:is-maximized'),
   onWinState: (callback) => {
-    ipcRenderer.on('flux:win:state', (_event, payload) => callback(payload));
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('flux:win:state', handler);
+    // Returns an unsubscribe so remounting views (player) can clean up.
+    return () => ipcRenderer.removeListener('flux:win:state', handler);
   },
   // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
   getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
