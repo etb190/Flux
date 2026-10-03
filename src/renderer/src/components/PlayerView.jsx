@@ -515,7 +515,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     });
     art.on('video:pause', () => {
       saveProgressRef.current();
-      updatePresenceRef.current(true);        // paused → (Paused), no elapsed timer
+      updatePresenceRef.current(true);        // paused → timer freezes (main re-sends)
     });
     art.on('video:error', () => {
       const v = art.video;

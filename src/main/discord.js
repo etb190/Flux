@@ -9,7 +9,12 @@
 //     counts UP the hours/minutes/seconds you are into the video).
 //   • Watching a series → details "Watching {title}", state
 //     "S{x}E{y}: {episode}" (+ " (Paused)"), same image/timestamp rules.
-//   • Paused → timestamps are removed (Discord stops the elapsed timer).
+//   • Paused → the timer FREEZES at the paused position. Discord renders
+//     elapsed as (now - start) and RETAINS omitted timestamps between
+//     updates, so freezing needs re-sends: while paused the service
+//     re-pushes the presence every ~1.5s with start = now - pausedPosition,
+//     pinning the clock around the pause point (±1s) instead of letting it
+//     run away.
 //   • Leaving the player → back to idle (only if not already idle).
 //   • A live toggle (default ON): off = clear presence + disconnect,
 //     on = reconnect + restore the last presence.
@@ -44,13 +49,24 @@ const APP_NAME = 'Netflix';
 
 // ── Pure presence builders (unit-testable, no client involved) ───────────
 // Timestamps show ELAPSED progress (deliberate Flux change vs Helix's
-// remaining-time countdown): paused → none; otherwise start = now -
-// position, so Discord renders the current hour/minute/second you are on
-// and counts up while you watch.
+// remaining-time countdown): start = now - position, so Discord renders
+// the current hour/minute/second you are on and counts up while you watch.
+// While paused the SAME start marker is recomputed from the paused
+// position on every service refresh (see startPausedRefresh) so the clock
+// stays pinned at the pause point instead of running away.
 
 function buildTimestamps({ now, positionSec, paused }) {
-  if (paused) return undefined;
   const position = Number(positionSec);
+  // Paused: emit a start marker for ANY known position (incl. 0). Discord
+  // keeps the previous timestamps when an update omits them, which would
+  // let the clock run on while paused — the service refreshes these.
+  // (positionSec == null is checked against the RAW arg: Number(null) is 0.)
+  if (paused) {
+    if (positionSec != null && Number.isFinite(position) && position >= 0) {
+      return { startTimestamp: new Date(now - Math.round(position) * 1000) };
+    }
+    return undefined;
+  }
   if (Number.isFinite(position) && position > 0) {
     return { startTimestamp: new Date(now - Math.round(position) * 1000) };
   }
@@ -160,7 +176,11 @@ function createDiscordService(options) {
   let initialized = false;
   let enabled = false;
   let currentKind = 'idle';          // 'idle' | 'movie' | 'series'
-  let lastPayload = null;            // last activity payload (restore on re-enable)
+  let lastArgs = null;               // last media args (restore on re-enable)
+  let refreshTimer = null;           // paused-position re-send interval
+  // Re-send cadence while paused (< 1s would render perfectly frozen;
+  // 1.5s gives the ±1s back-and-forth the paused display may show).
+  const PAUSED_REFRESH_MS = (opts.pausedRefreshMs != null) ? opts.pausedRefreshMs : 1500;
 
   const log = (...args) => {
     if (!opts.silent) console.log('[DiscordRPC]', ...args);
@@ -198,10 +218,17 @@ function createDiscordService(options) {
     });
   }
 
-  // Push one payload; reconnects on demand (Helix _updatePresence pattern).
-  async function update(kind, payload) {
+  // Push one presence; rebuilds the payload from the RAW args with a fresh
+  // `now` so repeated pushes (paused refresh) recompute the start marker.
+  async function push(kind, args) {
+    const now = Date.now();
+    const payload = kind === 'movie'
+      ? buildMoviePresence({ ...args, now })
+      : kind === 'series'
+        ? buildSeriesPresence({ ...args, now })
+        : buildIdlePresence(sessionStart);
     currentKind = kind;
-    lastPayload = payload;
+    if (kind !== 'idle') lastArgs = args;
     if (!enabled) return false;
     if (!client || !initialized) await connect();
     if (!client || !initialized) return false;
@@ -219,6 +246,34 @@ function createDiscordService(options) {
     }
   }
 
+  function stopPausedRefresh() {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  }
+
+  // While paused, re-push the same presence every PAUSED_REFRESH_MS with a
+  // freshly recomputed start marker: Discord's elapsed clock renders
+  // (now - start), so each re-send pins it back to the paused position —
+  // it can only drift +1s between refreshes, giving the "second 10,
+  // second 9" back-and-forth instead of a runaway counter.
+  function startPausedRefresh() {
+    stopPausedRefresh();
+    refreshTimer = setInterval(() => {
+      if (!enabled) { stopPausedRefresh(); return; }
+      push(currentKind, lastArgs).catch(() => {});
+    }, PAUSED_REFRESH_MS);
+    if (refreshTimer.unref) refreshTimer.unref();   // never block app quit
+  }
+
+  async function update(kind, args) {
+    stopPausedRefresh();
+    const p = push(kind, args);
+    if ((kind === 'movie' || kind === 'series') && args && args.paused &&
+        Number.isFinite(Number(args.positionSec))) {
+      startPausedRefresh();
+    }
+    return p;
+  }
+
   return {
     // Called once on app ready with the persisted user preference.
     async initialize(opts2) {
@@ -229,21 +284,23 @@ function createDiscordService(options) {
       return ok;
     },
 
-    // Live toggle (Helix setEnabled): off → clear + disconnect,
-    // on → reconnect + restore the last presence (or idle).
+    // Live toggle (Helix setEnabled): off → stop refresh + clear +
+    // disconnect, on → reconnect + restore the last presence (or idle);
+    // a paused restore restarts the freeze refresh via update().
     async setEnabled(on) {
       enabled = Boolean(on);
       if (enabled) {
         const ok = await connect();
         if (ok) {
-          if (lastPayload && currentKind !== 'idle') {
-            await update(currentKind, lastPayload);
+          if (lastArgs && currentKind !== 'idle') {
+            await update(currentKind, lastArgs);
           } else {
             await this.setIdle();
           }
         }
         return ok;
       }
+      stopPausedRefresh();
       try {
         if (client && initialized) await clearActivityRaw();
       } catch (_) { /* gone already */ }
@@ -257,15 +314,15 @@ function createDiscordService(options) {
     },
 
     async setIdle() {
-      return update('idle', buildIdlePresence(sessionStart));
+      return update('idle', null);
     },
 
     async setWatchingMovie(args) {
-      return update('movie', buildMoviePresence({ ...args, now: Date.now() }));
+      return update('movie', args);
     },
 
     async setWatchingSeries(args) {
-      return update('series', buildSeriesPresence({ ...args, now: Date.now() }));
+      return update('series', args);
     },
 
     // Helix clearToIdle: leaving the player returns to idle, but only
@@ -276,8 +333,9 @@ function createDiscordService(options) {
     },
 
     async clearPresence() {
+      stopPausedRefresh();
       currentKind = 'idle';
-      lastPayload = null;
+      lastArgs = null;
       try {
         if (client && initialized) await clearActivityRaw();
       } catch (_) { /* ignore */ }
@@ -285,6 +343,7 @@ function createDiscordService(options) {
 
     // App quit: wipe the presence, then close the pipe cleanly.
     async shutdown() {
+      stopPausedRefresh();
       try {
         if (client && initialized) await clearActivityRaw();
       } catch (_) { /* ignore */ }
