@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { HomeIcon, EyeIcon, BookmarkIcon } from './icons.jsx';
+import { HomeIcon, DiscoverIcon, EyeIcon, BookmarkIcon } from './icons.jsx';
 
 export default function SideBar({ active, onTab }) {
   const [version, setVersion] = useState('');
@@ -43,6 +43,7 @@ export default function SideBar({ active, onTab }) {
       <div className="px-4 pt-5 overflow-y-auto scroll-dark">
         <nav className="flex flex-col gap-1">
           {item('feed', 'Home', <HomeIcon size={16} />)}
+          {item('discover', 'Discover', <DiscoverIcon size={16} />)}
           {item('watched', 'Watched', <EyeIcon size={16} />)}
           {item('want', 'Want to watch', <BookmarkIcon size={16} />)}
         </nav>

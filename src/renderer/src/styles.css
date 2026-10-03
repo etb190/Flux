@@ -420,6 +420,59 @@ body {
   background: #f6121d;
 }
 
+/* ── Discover: genre chips (season-pill family, smaller) + edge arrows ──── */
+.genre-pill {
+  height: 30px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #d4d4d4;
+  background: #1c1c1c;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.genre-pill:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+.genre-pill.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+.genre-pill.active:hover {
+  background: #f6121d;
+}
+.chip-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 26px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-dim);
+  background: rgba(18, 18, 18, 0.92);
+  border: 1px solid var(--color-edge);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.chip-arrow:hover {
+  color: #fff;
+  background: var(--color-hover);
+  border-color: #3d3d3d;
+}
+.chip-arrow.left { left: -6px; }
+.chip-arrow.right { right: 8px; }
+
 /* ── Artplayer custom controls (CC + fullscreen): same size as the built-ins,
    sitting at the FAR RIGHT of the control bar, red tint while active ────── */
 .art-control-flux-cc,

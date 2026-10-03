@@ -10,6 +10,7 @@ import TitleBar from './components/TitleBar.jsx';
 import TopBar from './components/TopBar.jsx';
 import SideBar from './components/SideBar.jsx';
 import HomeView from './components/HomeView.jsx';
+import DiscoverView from './components/DiscoverView.jsx';
 import WatchedView from './components/WatchedView.jsx';
 import ResultsView from './components/ResultsView.jsx';
 import DetailsView from './components/DetailsView.jsx';
@@ -30,7 +31,7 @@ export default function App() {
   const [episode, setEpisode] = useState(null);
   const [activeSource, setActiveSource] = useState(null);
   const [submenuOpen, setSubmenuOpen] = useState(false);
-  const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|watched|want
+  const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|discover|watched|want
 
   const home = useHome();
   const search = useSearch();
@@ -361,7 +362,7 @@ export default function App() {
         return;
       }
       if (homeTabRef.current !== 'feed') {
-        setHomeTab('feed');                  // Esc in Watched/Want tab → Home feed
+        setHomeTab('feed');                  // Esc in Discover/Watched/Want → Home feed
         return;
       }
       setQuery('');
@@ -424,7 +425,9 @@ export default function App() {
           }
         >
           {view === 'home' ? (
-            homeTab === 'watched' ? (
+            homeTab === 'discover' ? (
+              <DiscoverView onOpen={(item) => openDetails(item, 'home')} />
+            ) : homeTab === 'watched' ? (
               <WatchedView list="watched" onOpen={(item) => openDetails(item, 'home')} />
             ) : homeTab === 'want' ? (
               <WatchedView list="want" onOpen={(item) => openDetails(item, 'home')} />

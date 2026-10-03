@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
   // Home page (Cinemeta addon catalogs + TMDB trending)
   getHome: () => ipcRenderer.invoke('flux:home'),
+  // Discover (genre browse: Cinemeta catalogs + TMDB "New")
+  discoverGenres: () => ipcRenderer.invoke('flux:discover:genres'),
+  discoverPage: (params) => ipcRenderer.invoke('flux:discover:page', params),
   // Watch history ("Continue watching" row)
   historyList: () => ipcRenderer.invoke('flux:history:list'),
   historyAdd: (entry) => ipcRenderer.invoke('flux:history:add', entry),

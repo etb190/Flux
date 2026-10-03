@@ -4,6 +4,7 @@ const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
 const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtitles.js');
 const home = require('./home.js');
+const discover = require('./discover.js');
 const library = require('./library.js');
 const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
@@ -308,6 +309,29 @@ ipcMain.handle('flux:home', async () => {
     });
   } catch (e) {
     return { error: (e && e.message) || 'Home data failed to load.' };
+  }
+});
+
+// ── IPC: Discover (genre browse: Cinemeta catalogs + TMDB "New") ─────────
+ipcMain.handle('flux:discover:genres', async () => {
+  try {
+    return await discover.fetchGenres({
+      cacheDir: path.join(app.getPath('userData'), 'cache')
+    });
+  } catch (e) {
+    return { error: (e && e.message) || 'Genres failed to load.' };
+  }
+});
+
+ipcMain.handle('flux:discover:page', async (_event, params) => {
+  const s = loadSettings(settingsFile());
+  try {
+    return await discover.fetchPage(params || {}, { key: s.tmdbApiKey });
+  } catch (e) {
+    return {
+      items: [], hasMore: false,
+      error: (e && e.message) || 'Discover failed to load.'
+    };
   }
 });
 
