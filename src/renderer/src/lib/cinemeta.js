@@ -53,6 +53,9 @@ async function getMetaDirect(type, id) {
   const body = await res.json();
   const m = body && body.meta;
   if (!m) return null;
+  const listOf = (v) =>
+    Array.isArray(v) ? v.map(String).filter(Boolean).join(', ')
+      : (v != null && String(v).trim() ? String(v) : null);
   return {
     id: String(m.id ?? id),
     type: String(m.type ?? type),
@@ -64,6 +67,10 @@ async function getMetaDirect(type, id) {
     imdbRating: m.imdbRating != null ? String(m.imdbRating) : null,
     genres: Array.isArray(m.genres) ? m.genres.map(String) : [],
     runtime: m.runtime != null ? String(m.runtime) : null,
+    cast: Array.isArray(m.cast) ? m.cast.map(String).filter(Boolean) : [],
+    director: listOf(m.director),
+    writer: listOf(m.writer),
+    country: listOf(m.country),
     videos: (Array.isArray(m.videos) ? m.videos : [])
       .map((v) => ({
         id: String(v.id ?? ''),

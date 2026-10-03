@@ -314,6 +314,65 @@ body {
   background: var(--color-accent);
 }
 
+/* Continue-watching resume progress bar (bottom edge of the card) */
+.cw-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  z-index: 2;
+}
+.cw-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(229, 9, 20, 0.8);
+}
+
+/* ── Details page (Stitch "Movie Details" / "TV Show Details" screens) ────
+   Darker cinematic surface: #0f1117 page, #14161f cards, #181b26 hover */
+.detail-page {
+  background: #0f1117;
+}
+.detail-card {
+  background: #14161f;
+}
+.detail-card:hover {
+  background: #181b26;
+}
+.detail-chip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: rgba(32, 36, 52, 0.9);
+  color: #d3d8e4;
+}
+.detail-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #161922;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 30px 8px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  outline: none;
+}
+.detail-select:hover {
+  background: #1d2230;
+}
+.detail-select option {
+  background: #161922;
+  color: #fff;
+}
+
 /* Watched page: search result rows */
 .watched-hit + .watched-hit {
   border-top: 1px solid var(--color-edge);

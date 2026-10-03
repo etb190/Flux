@@ -40,7 +40,7 @@ function applyPlayerRules(src, sources) {
   api.setPlayerRules(rules);
 }
 
-export default function PlayerView({ source, sources, meta, episode, subs, onBack, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
+export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
   const videoRef = useRef(null);
   const stageRef = useRef(null);
   const hlsRef = useRef(null);
@@ -48,6 +48,10 @@ export default function PlayerView({ source, sources, meta, episode, subs, onBac
   const failTimerRef = useRef(null);
   const idleTimerRef = useRef(null);
   const playedOnceRef = useRef(false);
+  const progressTimerRef = useRef(null);
+  const resumeAppliedRef = useRef(false);
+  const resumeSecRef = useRef(resumeSec || 0);
+  useEffect(() => { resumeSecRef.current = resumeSec || 0; }, [resumeSec]);
 
   const [buffering, setBuffering] = useState(true);
   const [failMsg, setFailMsg] = useState(null);
@@ -108,20 +112,34 @@ export default function PlayerView({ source, sources, meta, episode, subs, onBac
     setIdle(false);
   }, []);
 
-  // ── open one source ────────────────────────────────────────────────────
-  useEffect(() => {
-    // reset per-source state
-    setBuffering(true);
-    setFailMsg(null);
-    setVideoVisible(false);
-    setOverlayText('');
-    setPlaying(false);
-    setSeekPct(0);
-    setCur('0:00');
-    setDur('0:00');
-    playedOnceRef.current = false;
-    stopChromeHide();
+  // ── continue-watching progress (same-source resume) ────────────────────
+  const saveProgress = useCallback(() => {
+    const video = videoRef.current;
+    const api = window.fluxAPI;
+    if (!video || !api || typeof api.historyProgress !== 'function') return;
+    if (!meta || !meta.id || !/^tt\d+$/.test(meta.id)) return;
+    if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+    if (!Number.isFinite(video.currentTime) || video.currentTime < 3) return;
+    // watched to the end → the next resume restarts from the top
+    const pos = video.currentTime > video.duration * 0.95
+      ? 0 : video.currentTime;
+    api.historyProgress(meta.id, {
+      positionSec: Math.round(pos),
+      durationSec: Math.round(video.duration)
+    }).catch(() => {});
+  }, [meta]);
 
+  useEffect(() => {
+    progressTimerRef.current = setInterval(saveProgress, 8000);
+    return () => {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+      saveProgress();                            // final tick on close/switch
+    };
+  }, [saveProgress]);
+
+  // ── subtitle context (re-applied when meta lands late on a resume) ─────
+  useEffect(() => {
     const ctx = meta
       ? {
           name: meta.name,
@@ -134,6 +152,24 @@ export default function PlayerView({ source, sources, meta, episode, subs, onBac
         }
       : { name: source.title || '', imdbId: null, isEmbed: source.format === 'Embed' };
     subs.setContext(ctx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta, episode, source]);
+
+  // ── open one source ────────────────────────────────────────────────────
+  useEffect(() => {
+    // reset per-source state
+    setBuffering(true);
+    setFailMsg(null);
+    setVideoVisible(false);
+    setOverlayText('');
+    setPlaying(false);
+    setSeekPct(0);
+    setCur('0:00');
+    setDur('0:00');
+    playedOnceRef.current = false;
+    resumeAppliedRef.current = false;          // re-arm the same-source resume seek
+    stopChromeHide();
+
     applyPlayerRules(source, sources);
 
     if (source.format === 'Embed') {
@@ -403,10 +439,20 @@ export default function PlayerView({ source, sources, meta, episode, subs, onBac
             data-testid="player-video"
             playsInline
             onPlay={() => { setPlaying(true); scheduleChromeHide(); }}
-            onPause={() => { setPlaying(false); wakeChrome(); }}
+            onPause={() => { setPlaying(false); wakeChrome(); saveProgress(); }}
             onLoadedMetadata={() => {
               const v = videoRef.current;
-              if (v) setDur(fmtTime(v.duration));
+              if (v) {
+                setDur(fmtTime(v.duration));
+                // same-source resume: jump to where you left off (once)
+                if (!resumeAppliedRef.current && resumeSecRef.current > 5 &&
+                    Number.isFinite(v.duration) && v.duration > 0) {
+                  resumeAppliedRef.current = true;
+                  try {
+                    v.currentTime = Math.min(resumeSecRef.current, Math.max(0, v.duration - 5));
+                  } catch (_err) {}
+                }
+              }
             }}
             onTimeUpdate={handleTimeUpdate}
             onPlaying={handlePlaying}

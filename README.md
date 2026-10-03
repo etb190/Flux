@@ -4,16 +4,28 @@ A lightweight streaming app for Windows, built with **Electron + React + Vite** 
 
 Flux uses the same metadata source as [Helix](https://github.com/etb190/Helix) (the Stremio Cinemeta addon) to search movies & series, and a home page filled by the Streaming Availability API (daily Top 10s, popular per service, new & leaving soon) mixed with TMDB trending.
 
-## Status (v0.12.0)
+## Status (v0.15.0)
 
-- [x] Home page (Streaming Availability API + TMDB trending, hero banner, poster rows)
+- [x] Stitch design system ("Netflix Dashboard Homepage" generation): Inter font,
+      navy stack (#11141e sidebar / #141824 main / #1a1f2e cards), red #E50914
+      accent, persistent left sidebar (Home / Watched), topbar search
+- [x] Home page: square-cornered 16:9 backdrop cards in flush rows (no gaps),
+      arrow-paged carousels (no scrollbar), no hero banner
+- [x] Continue Watching: first row, S/E + time-left badge, red progress bar,
+      click resumes the SAME source at the saved timestamp, hover x dismisses
+      (persisted); episode/movie stills as card art
+- [x] Watched page: search + add movies/shows; "Because you watched …" rows on
+      the home page from TMDB /movie|tv/{id}/recommendations
+- [x] Details page (Stitch movie/TV detail screens): full-bleed hero with match
+      pill + IMDb chip, red-gradient series title, storyline + info card,
+      season dropdown + episode rows with stills
 - [x] Search bar (debounced as-you-type + Enter)
-- [x] Poster results grid (movies + series, interleaved)
-- [x] Details page with season tabs + episode lists (50-ep batches for long seasons)
 - [x] Source scanning (multi-provider, live progress, text + size filters)
-- [x] Player: HLS (hls.js) / MP4 direct playback + embed webviews, header injection + CORS passthrough
+- [x] Player: HLS (hls.js) / MP4 direct playback + embed webviews, header
+      injection + CORS passthrough, playback position saved every few seconds
 - [x] Helix subtitle system (SRT/VTT/ASS, en/fr/it/es/ar whitelist, delay, embedded tracks)
-- [x] Settings: ANGLE graphics backend (D3D9 default), Streaming Availability key + country
+- [x] Settings: ANGLE graphics backend (D3D9 default), Streaming Availability
+      key + country, TMDB key
 - [x] Squirrel.Windows installer lifecycle (install/update/uninstall events)
 
 ## Project structure

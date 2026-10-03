@@ -30,6 +30,22 @@ export function formatAirDate(released) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/* Continue-watching timestamp: "42m left" / "1h 12m left" when the duration
+ * is known, absolute position ("28:40") otherwise. Null when no progress. */
+export function fmtLeft(positionSec, durationSec) {
+  const pos = Number(positionSec);
+  if (!Number.isFinite(pos) || pos < 5) return null;
+  const dur = Number(durationSec);
+  if (Number.isFinite(dur) && dur > 0) {
+    const left = Math.max(0, Math.round(dur - pos));
+    if (left < 60) return left + 's left';
+    const m = Math.round(left / 60);
+    if (m < 60) return m + 'm left';
+    return Math.floor(m / 60) + 'h ' + (m % 60) + 'm left';
+  }
+  return fmtTime(pos);
+}
+
 /* Helix pattern: one season with 50+ episodes → 50-episode tabs */
 export const EP_BATCH_SIZE = 50;
 

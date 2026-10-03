@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   historyList: () => ipcRenderer.invoke('flux:history:list'),
   historyAdd: (entry) => ipcRenderer.invoke('flux:history:add', entry),
   historyRemove: (imdbId) => ipcRenderer.invoke('flux:history:remove', imdbId),
+  // Live playback position / artwork patch (Continue watching)
+  historyProgress: (imdbId, patch) =>
+    ipcRenderer.invoke('flux:history:progress', imdbId, patch),
   // Watched list (drives the suggestion rows)
   watchedList: () => ipcRenderer.invoke('flux:watched:list'),
   watchedAdd: (entry) => ipcRenderer.invoke('flux:watched:add', entry),

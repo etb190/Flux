@@ -43,6 +43,8 @@ export default function App() {
   const resultsScrollRef = useRef(0);
   const detailsSeqRef = useRef(0);
   const detailsReturnRef = useRef('results');
+  const resumeEntryRef = useRef(null);       // history entry behind a resumed player
+  const [resumeSec, setResumeSec] = useState(0);   // seek target for the player
 
   // mirrors for the stable Esc handler
   const viewRef = useRef(view);
@@ -188,28 +190,106 @@ export default function App() {
 
   const openPlayer = useCallback((src) => {
     setActiveSource(src);
+    resumeEntryRef.current = null;           // fresh playback, not a resume
+    setResumeSec(0);
 
     // Continue watching: record this playback in the history (one entry per
-    // title; series entries carry the season/episode).
+    // title; series entries carry the season/episode, the episode still,
+    // and the source identity so the row can resume the SAME source).
     const api = typeof window !== 'undefined' ? window.fluxAPI : null;
     if (meta && meta.id && /^tt\d+$/.test(meta.id) &&
         api && typeof api.historyAdd === 'function') {
       const isSeries = meta.type === 'series';
+      const epMeta = isSeries && Array.isArray(meta.videos) && episode
+        ? meta.videos.find((v) =>
+            (v.season ?? 1) === (episode.season ?? 1) &&
+            (v.episode ?? 1) === (episode.episode ?? 1))
+        : null;
       Promise.resolve(api.historyAdd({
         imdbId: meta.id,
         type: meta.type,
         title: meta.name,
         poster: meta.poster || null,
         season: isSeries && episode ? (episode.season ?? 1) : null,
-        episode: isSeries && episode ? (episode.episode ?? 1) : null
+        episode: isSeries && episode ? (episode.episode ?? 1) : null,
+        episodeTitle: epMeta ? epMeta.title : null,
+        // card art: the episode's own still for series, backdrop for movies
+        still: isSeries ? (epMeta ? epMeta.thumbnail : null) : (meta.background || null),
+        backdrop: meta.background || null,
+        // fresh playback: reset the resume point + record the source
+        positionSec: 0,
+        sourceUrl: src && src.url ? String(src.url) : null,
+        sourceProvider: src && src.provider ? String(src.provider) : null,
+        sourceTitle: src && src.title ? String(src.title) : null,
+        sourceFormat: src && src.format ? String(src.format) : null,
+        sourceHeaders: src && src.headers ? src.headers : null
       })).catch(() => {});
     }
   }, [meta, episode]);
 
+  // ── resume from the Continue watching row ─────────────────────────────
+  // Same source you were on, starting where you left off. Entries without a
+  // stored direct source (embeds / legacy) fall back to the details view.
+  const resumeHistory = useCallback((entry) => {
+    if (!entry || !entry.imdbId) return;
+    const api = typeof window !== 'undefined' ? window.fluxAPI : null;
+    const resumable = entry.sourceUrl && entry.sourceFormat &&
+      entry.sourceFormat !== 'Embed' && /^tt\d+$/.test(entry.imdbId);
+
+    if (!resumable || !api) {
+      openDetails({ id: entry.imdbId, type: entry.type, name: entry.title, poster: entry.poster }, 'home');
+      return;
+    }
+
+    // Bump the entry to the front, keeping its saved position + source
+    if (typeof api.historyAdd === 'function') {
+      Promise.resolve(api.historyAdd({
+        imdbId: entry.imdbId, type: entry.type, title: entry.title,
+        poster: entry.poster, season: entry.season, episode: entry.episode,
+        episodeTitle: entry.episodeTitle, still: entry.still,
+        backdrop: entry.backdrop, positionSec: entry.positionSec || 0,
+        sourceUrl: entry.sourceUrl, sourceProvider: entry.sourceProvider,
+        sourceTitle: entry.sourceTitle, sourceFormat: entry.sourceFormat,
+        sourceHeaders: entry.sourceHeaders
+      })).catch(() => {});
+    }
+
+    detailsSeqRef.current++;                 // invalidate pending detail loads
+    streams.stopScan();
+    resumeEntryRef.current = entry;
+    setMeta(null);
+    setActiveSource({
+      url: entry.sourceUrl,
+      format: entry.sourceFormat,
+      provider: entry.sourceProvider || 'Resumed source',
+      title: entry.sourceTitle || 'Resumed source',
+      headers: entry.sourceHeaders || null
+    });
+    setEpisode(entry.type === 'series'
+      ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
+      : null);
+    setResumeSec(entry.positionSec > 5 ? entry.positionSec : 0);
+    // meta loads in the background — feeds the player header, subtitle
+    // context and the sources fallback ("Change source")
+    getMeta(entry.type, entry.imdbId)
+      .then((m) => {
+        if (m && resumeEntryRef.current === entry) setMeta(m);
+      })
+      .catch(() => {});
+  }, [openDetails, streams]);
+
   const closePlayer = useCallback(() => {
     setSubmenuOpen(false);
-    setActiveSource(null);                   // back to the source list
-  }, []);
+    setActiveSource(null);
+    // Resumed playback backed by meta + episode → back opens the source
+    // list for this title (fresh scan) instead of dropping to home
+    const entry = resumeEntryRef.current;
+    if (entry && meta && meta.id === entry.imdbId) {
+      openSources(entry.type === 'series'
+        ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
+        : { title: meta.name, season: 1, episode: 1 });
+    }
+  }, [meta, openSources]);
 
   // ── global Esc chain ───────────────────────────────────────────────────
   useEffect(() => {
@@ -282,6 +362,7 @@ export default function App() {
                 home={home}
                 onOpen={(item) => openDetails(item, 'home')}
                 onOpenSettings={() => setSettingsOpen(true)}
+                onResume={resumeHistory}
               />
             )
           ) : null}
@@ -358,6 +439,7 @@ export default function App() {
           meta={meta}
           episode={episode}
           subs={subs}
+          resumeSec={resumeSec}
           onBack={closePlayer}
           submenuOpen={submenuOpen}
           onToggleSubmenu={() => setSubmenuOpen((v) => !v)}

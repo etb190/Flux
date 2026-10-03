@@ -249,6 +249,9 @@ ipcMain.handle('flux:history:add', (_e, entry) => {
 });
 ipcMain.handle('flux:history:remove', (_e, imdbId) =>
   library.removeHistory(libraryFile(), imdbId));
+// Live playback progress + artwork enrichment (patches in place, no reorder)
+ipcMain.handle('flux:history:progress', (_e, imdbId, patch) =>
+  library.updateHistoryProgress(libraryFile(), imdbId, patch));
 
 // ── IPC: watched list (manual list that drives the suggestions) ──────────
 ipcMain.handle('flux:watched:list', () => library.listWatched(libraryFile()));
