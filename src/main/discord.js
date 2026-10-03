@@ -16,8 +16,9 @@
 //     pinning the clock around the pause point (±1s) instead of letting it
 //     run away.
 //   • Leaving the player → back to idle (only if not already idle).
-//   • A live toggle (default ON): off = clear presence + disconnect,
-//     on = reconnect + restore the last presence.
+//   • Always on — the sidebar toggle was removed (v0.23.1); setEnabled
+//     stays in the service API (tests / future settings UI) but nothing
+//     in the app calls it anymore.
 //
 // The Discord application is branded "Netflix" (that is what the presence
 // shows); the app id is the Discord Application's ID ("the discord netflix

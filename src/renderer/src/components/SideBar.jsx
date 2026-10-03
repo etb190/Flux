@@ -6,13 +6,10 @@
  */
 
 import { useEffect, useState } from 'react';
-import { HomeIcon, EyeIcon, BookmarkIcon, DiscordIcon } from './icons.jsx';
+import { HomeIcon, EyeIcon, BookmarkIcon } from './icons.jsx';
 
 export default function SideBar({ active, onTab }) {
   const [version, setVersion] = useState('');
-  // Discord Rich Presence toggle (Helix settings tile, default ON).
-  // Flips live via flux:settings:set — main applies setEnabled on change.
-  const [discordOn, setDiscordOn] = useState(true);
   useEffect(() => {
     const api = window.fluxAPI;
     if (api && typeof api.appVersion === 'function') {
@@ -20,23 +17,7 @@ export default function SideBar({ active, onTab }) {
         .then((v) => { if (v) setVersion('v' + v); })
         .catch(() => {});
     }
-    if (api && typeof api.getSettings === 'function') {
-      Promise.resolve(api.getSettings())
-        .then((s) => { if (s && typeof s.discordRpcEnabled === 'boolean') setDiscordOn(s.discordRpcEnabled); })
-        .catch(() => {});
-    }
   }, []);
-
-  const toggleDiscord = () => {
-    const next = !discordOn;
-    setDiscordOn(next);                       // optimistic
-    const api = window.fluxAPI;
-    if (api && typeof api.saveSettings === 'function') {
-      Promise.resolve(api.saveSettings({ discordRpcEnabled: next }))
-        .then((saved) => { if (saved && typeof saved.discordRpcEnabled === 'boolean') setDiscordOn(saved.discordRpcEnabled); })
-        .catch(() => setDiscordOn(!next));    // revert on failure
-    }
-  };
 
   const item = (id, label, icon) => (
     <button
@@ -68,26 +49,7 @@ export default function SideBar({ active, onTab }) {
       </div>
 
       <div className="px-4 py-4 border-t border-white/[0.05]">
-        <button
-          data-testid="discord-toggle"
-          onClick={toggleDiscord}
-          title={discordOn
-            ? 'Discord Rich Presence is broadcasting your activity — click to disable'
-            : 'Discord Rich Presence is off — click to enable'}
-          className={'flex items-center gap-2.5 px-3 py-2 w-full text-left text-[13.5px] font-medium transition-colors cursor-pointer ' +
-            (discordOn ? 'text-[#5865F2] hover:bg-hover/40' : 'text-muted hover:text-dim hover:bg-hover/40')}
-        >
-          <DiscordIcon size={16} />
-          <span>Discord RPC</span>
-          <span
-            data-testid="discord-state"
-            className={'ml-auto text-[10px] font-semibold tracking-[0.08em] uppercase ' +
-              (discordOn ? 'text-[#5865F2]' : 'text-muted/70')}
-          >
-            {discordOn ? 'On' : 'Off'}
-          </span>
-        </button>
-        <p className="px-2 mt-3 text-[10.5px] font-semibold tracking-[0.1em] text-muted/70 select-none">
+        <p className="px-2 text-[10.5px] font-semibold tracking-[0.1em] text-muted/70 select-none">
           FLUX {version}
         </p>
       </div>

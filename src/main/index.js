@@ -271,12 +271,7 @@ ipcMain.handle('flux:settings:get', () => ({
 }));
 
 ipcMain.handle('flux:settings:set', (_event, patch) => {
-  const before = loadSettings(settingsFile());
   const saved = saveSettings(settingsFile(), patch);
-  // Live-apply the Discord Rich Presence toggle (Helix setEnabled).
-  if (Boolean(saved.discordRpcEnabled) !== Boolean(before.discordRpcEnabled)) {
-    discord.setEnabled(saved.discordRpcEnabled).catch(() => {});
-  }
   return saved;
 });
 
@@ -403,9 +398,9 @@ app.whenReady().then(() => {
   if (squirrelStartup) return;   // Squirrel event run — no UI
   installPlayerInterceptors();
   createWindow();
-  // Discord Rich Presence — connect + idle presence when enabled (default).
-  // Silent no-op when Discord isn't running.
-  discord.initialize({ enabled: loadSettings(settingsFile()).discordRpcEnabled })
+  // Discord Rich Presence — always on (the sidebar toggle was removed in
+  // v0.23.1). Silent no-op when Discord isn't running.
+  discord.initialize({ enabled: true })
     .catch(() => {});
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
