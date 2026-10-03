@@ -1,13 +1,25 @@
 // ── Flux: Discover page (main process) ───────────────────────────────────
 // Genre-driven browse for the Discover tab. Three sorts, one genre facet:
 //
-//   Popular   → Cinemeta "top" catalog        /catalog/{type}/top/genre={g}&skip={n}.json
-//   Top Rated → Cinemeta "imdbRating" catalog /catalog/{type}/imdbRating/genre={g}&skip={n}.json
-//   New       → TMDB Discover                 /discover/{movie|tv}?with_genres={id}&sort_by={date}.desc&vote_count.gte=20&page={n}
+//   Popular   → Cinemeta "top" catalog  /catalog/{type}/top/genre={g}&skip={n}.json
+//   Top Rated → TMDB Discover           /discover/{movie|tv}?sort_by=vote_average.desc&vote_count.gte=300
+//   New       → TMDB Discover           /discover/{movie|tv}?sort_by={date}.desc&{date}.lte=today&vote_count.gte=20
 //
 // Cinemeta carries native imdb ids (details/streams flow needs nothing
 // extra). TMDB results carry TMDB ids, so they go through the SAME
 // external_ids → imdb_id enrichment the trending row uses (tmdbhome.js).
+//
+// WHY Top Rated is TMDB: Cinemeta's "imdbRating" catalog was probed and is
+// unusable for a Top Rated wall — its whole pool is ~200 movies / ~400
+// series, pages come back UNSORTED, ~16% of metas have no rating at all and
+// scores run down to the 5s. TMDB's vote_average.desc + a 300-vote floor is
+// sorted high→low by construction, every item is rated, and it paginates
+// hundreds of pages deep.
+//
+// TMDB discover quirk: /discover results do NOT carry media_type (trending
+// does), so enrichment must have it attached — without it the external_ids
+// URL is /3/undefined/{id}/... and every item 404s off the grid.
+//
 // Cinemeta's "year" catalog was probed and can NOT combine a year with a
 // genre (genre=Action alone returns 0 metas), which is why New is
 // TMDB-backed.
@@ -33,6 +45,7 @@ const CINEMETA_PAGE_SIZE = 50;               // metas per Cinemeta catalog page
 const CINEMETA_MAX_SKIP = 2000;              // sanity bound on infinite scroll
 const TMDB_MAX_PAGES = 500;                  // TMDB hard cap on discover pages
 const MEM_CACHE_MAX = 240;                   // entries before oldest-eviction
+const RATING_MIN_VOTES = 300;                // Top Rated floor — keeps the wall genuinely "top"
 
 // Overridable fetch (tests inject a stub). TMDB enrichment goes through
 // tmdbhome.js's own fetcher — tests must inject there too.
@@ -162,28 +175,27 @@ async function fetchPage(params, opts) {
   const skip = Math.min(CINEMETA_MAX_SKIP, Math.max(0, Math.floor(Number(p.skip) || 0)));
   const page = Math.max(1, Math.floor(Number(p.page) || 1));
   const key = (opts && opts.key) || undefined;
-  const memKey = [sort, type, genre, sort === 'new' ? page : skip].join('|');
+  const memKey = [sort, type, genre, sort === 'popular' ? skip : page].join('|');
 
   const hit = memGet(memKey);
   if (hit) return hit;
 
   let result;
-  if (sort === 'new') {
-    result = await fetchNewPage(type, genre, page, key);
+  if (sort === 'popular') {
+    result = await fetchCinemetaPage(type, genre, skip);
   } else {
-    result = await fetchCinemetaPage(type, sort, genre, skip);
+    result = await fetchTmdbPage(type, sort, genre, page, key);
   }
   memSet(memKey, result);
   return result;
 }
 
-// Popular / Top Rated — Cinemeta addon catalogs (extras: genre + skip).
-async function fetchCinemetaPage(type, sort, genre, skip) {
-  const catalogId = sort === 'rating' ? 'imdbRating' : 'top';
+// Popular — Cinemeta "top" addon catalog (extras: genre + skip).
+async function fetchCinemetaPage(type, genre, skip) {
   const extras = [];
   if (genre) extras.push('genre=' + encodeURIComponent(genre));
   extras.push('skip=' + skip);
-  const url = CINEMETA_BASE + '/catalog/' + type + '/' + catalogId + '/' +
+  const url = CINEMETA_BASE + '/catalog/' + type + '/top/' +
     extras.join('&') + '.json';
   const body = await getJson(url);
   const metas = Array.isArray(body && body.metas) ? body.metas : [];
@@ -196,28 +208,40 @@ async function fetchCinemetaPage(type, sort, genre, skip) {
   };
 }
 
-// New — TMDB discover, newest first with a vote-count floor so the page
-// isn't straight-to-video sludge. Items are enriched to imdb ids with the
-// trending row's pipeline (tmdbhome.enrichWithImdbIds).
-async function fetchNewPage(type, genre, page, key) {
+// Top Rated / New — TMDB discover, enriched to imdb ids with the trending
+// row's pipeline (tmdbhome.enrichWithImdbIds).
+//   rating → all-time best: vote_average.desc with a 300-vote floor
+//   new    → newest RELEASED first (date.lte = today; without the ceiling
+//            the top of the wall is unreleased announcements)
+async function fetchTmdbPage(type, sort, genre, page, key) {
   const tmdbType = type === 'series' ? 'tv' : 'movie';
   const genreId = genre ? (TMDB_GENRE_IDS[type] || {})[genre] : undefined;
   if (genre && genreId === null) {
     return {
       items: [],
       hasMore: false,
-      note: 'New isn\u2019t available for ' + genre + ' \u2014 try Popular or Top Rated.'
+      note: genre + ' isn\u2019t available for this sort \u2014 try Popular instead.'
     };
   }
-  const q = {
-    sort_by: type === 'series' ? 'first_air_date.desc' : 'primary_release_date.desc',
-    include_adult: 'false',
-    'vote_count.gte': '20',
-    page: String(page)
-  };
+  const today = new Date().toISOString().slice(0, 10);
+  const dateField = tmdbType === 'tv' ? 'first_air_date' : 'primary_release_date';
+  const q = { include_adult: 'false', page: String(page) };
+  if (sort === 'rating') {
+    q.sort_by = 'vote_average.desc';
+    q['vote_count.gte'] = String(RATING_MIN_VOTES);
+  } else {
+    q.sort_by = dateField + '.desc';
+    q[dateField + '.lte'] = today;
+    q['vote_count.gte'] = '20';
+  }
   if (genre && genreId != null) q.with_genres = String(genreId);
   const body = await getJson(tmdbhome.tmdbUrl('/discover/' + tmdbType, q, key));
-  const raw = (body && Array.isArray(body.results) ? body.results : []).slice(0, 20);
+  const raw = (body && Array.isArray(body.results) ? body.results : [])
+    .slice(0, 20)
+    // discover results carry NO media_type — enrichment builds
+    // /{media_type}/{id}/external_ids and 404s without it (trending
+    // results already have it, which is why only this path was broken).
+    .map((r) => ({ media_type: tmdbType, ...r }));
   const items = await tmdbhome.enrichWithImdbIds(raw, key);
   const totalPages = Math.min(Number(body && body.total_pages) || 0, TMDB_MAX_PAGES);
   return { items, hasMore: page < totalPages && items.length > 0 };

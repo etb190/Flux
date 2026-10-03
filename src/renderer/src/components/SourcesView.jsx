@@ -250,7 +250,9 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
             <span className="truncate">Available Streaming Sources &amp; Mirrors</span>
           </h2>
           <p data-testid="sources-sub" className="text-xs text-[#9b9b9b] mt-0.5 truncate">
-            {title} &mdash; {meta.name} &middot; pick a node for the best playback quality
+            {isSeries ? title + ' \u2014 ' + meta.name : meta.name}
+            {' '}
+            &middot; pick a node for the best playback quality
           </p>
         </div>
         {scan.sources.length > 0 && !scanning ? (

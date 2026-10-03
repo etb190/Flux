@@ -16,7 +16,7 @@
  * flashes empty when hopping tabs.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PosterCard from './PosterCard.jsx';
 import { ChevronLeftIcon, ChevronRightIcon, FilmIcon } from './icons.jsx';
 
@@ -25,6 +25,24 @@ const SORTS = [
   { id: 'rating', label: 'Top Rated' },
   { id: 'new', label: 'New' }
 ];
+
+// Filter persistence — the picked type/sort/genre survive a full app
+// refresh (localStorage), not just tab switches (the module memo).
+const LS_FILTERS_KEY = 'flux.discover.filters.v1';
+
+function loadSavedFilters() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_FILTERS_KEY) || 'null');
+    if (!raw || typeof raw !== 'object') return null;
+    return {
+      type: raw.type === 'series' ? 'series' : 'movie',
+      sort: ['popular', 'rating', 'new'].includes(raw.sort) ? raw.sort : 'popular',
+      genre: typeof raw.genre === 'string' ? raw.genre : ''
+    };
+  } catch (_err) {
+    return null;
+  }
+}
 
 // Module-scope snapshot (survives unmount/remount of this component only).
 let memo = null;
@@ -128,10 +146,13 @@ function EmptyPane({ genre, sortLabel }) {
 // ── DiscoverView ──────────────────────────────────────────────────────────
 
 export default function DiscoverView({ onOpen }) {
-  // Hydrate from the module memo (tab switch) or start fresh.
-  const [type, setType] = useState(() => (memo && memo.type) || 'movie');
-  const [sort, setSort] = useState(() => (memo && memo.sort) || 'popular');
-  const [genre, setGenre] = useState(() => (memo && memo.genre) || '');
+  // Hydrate from the module memo (tab switch), then localStorage (refresh),
+  // then the defaults.
+  const saved = useMemo(loadSavedFilters, []);
+  const [type, setType] = useState(() => (memo && memo.type) || (saved && saved.type) || 'movie');
+  const [sort, setSort] = useState(() => (memo && memo.sort) || (saved && saved.sort) || 'popular');
+  const [genre, setGenre] = useState(() =>
+    memo ? memo.genre : (saved && saved.genre) || '');
   const [genres, setGenres] = useState(() => (memo && memo.genres) || null);
   const [items, setItems] = useState(() => (memo && memo.items) || []);
   const [status, setStatus] = useState(() => (memo ? 'ready' : 'idle'));
@@ -148,6 +169,13 @@ export default function DiscoverView({ onOpen }) {
   const sentinelRef = useRef(null);
 
   const sortLabel = (SORTS.find((s) => s.id === sort) || SORTS[0]).label;
+
+  // Persist the picked filters (survives a full app refresh).
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_FILTERS_KEY, JSON.stringify({ type, sort, genre }));
+    } catch (_err) { /* private mode / storage full — filters just won't persist */ }
+  }, [type, sort, genre]);
 
   // Persist the snapshot whenever a clean state settles. While a page is
   // loading (or errored) the memo is dropped — a remount then starts fresh
@@ -265,9 +293,9 @@ export default function DiscoverView({ onOpen }) {
       setLoadingMore(false);
       return;
     }
-    const next = sort === 'new'
-      ? { skip: 0, page: (cur.page || 1) + 1 }
-      : { skip: (cur.skip || 0) + 50, page: 1 };
+    const next = sort === 'popular'
+      ? { skip: (cur.skip || 0) + 50, page: 1 }
+      : { skip: 0, page: (cur.page || 1) + 1 };
     Promise.resolve(api.discoverPage({ type, sort, genre, ...next }))
       .then((res) => {
         if (seq !== seqRef.current) return;
@@ -319,15 +347,8 @@ export default function DiscoverView({ onOpen }) {
   };
 
   return (
-    <div data-testid="disc-view" className="max-w-[1200px]">
-      <div className="flex items-center gap-3 mt-1">
-        <h2 className="text-[22px] font-extrabold">Discover</h2>
-        {status === 'ready' && items.length ? (
-          <span data-testid="disc-count" className="text-xs font-semibold text-dim bg-search border border-edge px-2.5 py-0.5">
-            {items.length} {items.length === 1 ? 'title' : 'titles'}
-          </span>
-        ) : null}
-      </div>
+    <div data-testid="disc-view">
+      <h2 className="text-[22px] font-extrabold mt-1">Discover</h2>
 
       {/* Type + sort segmented toggles (season-pill family, red active) */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 mt-4">

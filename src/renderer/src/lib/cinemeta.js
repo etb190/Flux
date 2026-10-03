@@ -74,7 +74,12 @@ async function getMetaDirect(type, id) {
     type: String(m.type ?? type),
     name: String(m.name ?? 'Unknown'),
     poster: m.poster ? String(m.poster) : null,
-    background: m.background ? String(m.background) : null,
+    // metahub serves small/medium/large — the details page paints the
+    // background edge-to-edge, so take the large rendition.
+    background: m.background
+      ? String(m.background).replace('/background/medium/', '/background/large/')
+      : null,
+    logo: m.logo ? String(m.logo) : null,
     description: m.description ? String(m.description) : null,
     year: m.releaseInfo != null ? String(m.releaseInfo) : null,
     imdbRating: m.imdbRating != null ? String(m.imdbRating) : null,

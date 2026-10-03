@@ -43,6 +43,7 @@ export default function App() {
   const resultsScrollRef = useRef(0);
   const detailsSeqRef = useRef(0);
   const detailsReturnRef = useRef('results');
+  const scanTargetRef = useRef(null);        // params behind the running/last scan
   const resumeEntryRef = useRef(null);       // history entry behind a resumed player
   const [resumeSec, setResumeSec] = useState(0);   // seek target for the player
 
@@ -145,10 +146,46 @@ export default function App() {
   }, [search, goHome]);
 
   // ── details orchestration ──────────────────────────────────────────────
+  // startScanFor remembers what the current scan is for (scanTargetRef) so
+  // re-entering the same title/episode NEVER rescans, and the movie details
+  // page can auto-start its scan once.
+  const startScanFor = useCallback((m, ep) => {
+    const params = {
+      type: m.type,
+      imdbId: m.id,
+      title: m.name,
+      year: m.year,
+      season: ep.season ?? 1,
+      episode: ep.episode ?? 1
+    };
+    scanTargetRef.current = params;
+    streams.startScan(params);
+  }, [streams]);
+
+  const sameScanTarget = useCallback((m, ep) => {
+    const cur = scanTargetRef.current;
+    return Boolean(cur && m &&
+      cur.type === m.type && cur.imdbId === m.id &&
+      (cur.season ?? 1) === (ep.season ?? 1) &&
+      (cur.episode ?? 1) === (ep.episode ?? 1));
+  }, []);
+
+  // Movies: the sources list lives INLINE on the details page (auto-shown,
+  // no "pick a source below" step). Safe to call repeatedly — no-ops while
+  // the current scan already belongs to this title.
+  const ensureMovieScan = useCallback((m) => {
+    if (!m || m.type !== 'movie') return;
+    if (sameScanTarget(m, { season: 1, episode: 1 })) return;
+    streams.reset();
+    subs.resetForEpisode();
+    startScanFor(m, { title: m.name, season: 1, episode: 1 });
+  }, [sameScanTarget, startScanFor, streams, subs]);
+
   const openDetails = useCallback(async (item, from) => {
     const seq = ++detailsSeqRef.current;
     setMeta(null);
     streams.stopScan();
+    scanTargetRef.current = null;
     detailsReturnRef.current = from === 'home' ? 'home' : 'results';
     if (contentRef.current) {
       if (from === 'home') homeScrollRef.current = contentRef.current.scrollTop;
@@ -162,16 +199,18 @@ export default function App() {
       if (!m) throw new Error('no meta');
       setMeta(m);
       setView('details');
+      if (m.type === 'movie') ensureMovieScan(m);  // movies auto-scan (inline sources)
     } catch (_err) {
       if (seq !== detailsSeqRef.current) return;
       setView('details-error');
     }
-  }, [streams]);
+  }, [streams, ensureMovieScan]);
 
   const closeDetails = useCallback(() => {
     detailsSeqRef.current++;                 // invalidate in-flight loads
     setActiveSource(null);
     streams.stopScan();
+    scanTargetRef.current = null;
     if (detailsReturnRef.current === 'home') setView('home');
     else setView('results');                 // scroll restored by view effect
   }, [streams]);
@@ -180,20 +219,15 @@ export default function App() {
   const openSources = useCallback((ep) => {
     if (!meta) return;
     setEpisode(ep);
-    streams.reset();
-    // New episode → the previously loaded subtitles belong to the old one
-    subs.resetForEpisode();
+    if (!sameScanTarget(meta, ep)) {
+      // New episode/title → the previously loaded subtitles belong to the
+      // old one, and the running scan is for the wrong target
+      subs.resetForEpisode();
+      streams.reset();
+      startScanFor(meta, ep);
+    }
     setView('sources');
-    streams.startScan({
-      type: meta.type,
-      imdbId: meta.id,
-      title: meta.name,
-      year: meta.year,
-      season: ep.season ?? 1,
-      episode: ep.episode ?? 1
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, streams, subs]);
+  }, [meta, streams, subs, startScanFor, sameScanTarget]);
 
   const closeSources = useCallback(() => {
     setActiveSource(null);                   // player can't be open here, stay safe
@@ -249,6 +283,7 @@ export default function App() {
     if (!ytId) return;
     detailsSeqRef.current++;
     streams.stopScan();
+    scanTargetRef.current = null;            // returning restarts the movie scan
     resumeEntryRef.current = null;
     setResumeSec(0);
     let url = null;
@@ -459,8 +494,21 @@ export default function App() {
           {inDetailsFlow ? (
             <section
               data-testid="details"
-              className="detail-page flex flex-col min-h-full shrink-0"
+              className="detail-page relative isolate flex flex-col min-h-full shrink-0"
             >
+              {/* Full-window coverart — the original-repo detail look: the
+                  title's background fills the window behind everything */}
+              {meta && meta.background ? (
+                <div aria-hidden="true" data-testid="details-backdrop" className="detail-backdrop">
+                  <img
+                    src={meta.background}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={(e) => e.currentTarget.parentElement.remove()}
+                  />
+                  <div className="detail-backdrop-scrim" />
+                </div>
+              ) : null}
               {/* One layer: back / breadcrumb / search are part of the
                   content layer (Stitch detail screens), not app chrome. */}
               <DetailTopBar
@@ -490,7 +538,10 @@ export default function App() {
               {view === 'details' && meta ? (
                 <DetailsView
                   meta={meta}
+                  scan={streams}
                   onFindSources={openSources}
+                  onPlaySource={openPlayer}
+                  onAutoScan={ensureMovieScan}
                   onPlayTrailer={openTrailer}
                 />
               ) : null}

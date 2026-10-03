@@ -15,6 +15,7 @@ import {
   PlayIcon, PlusIcon, CheckIcon, ThumbUpIcon, EyeIcon, BookmarkIcon,
   ChevronLeftIcon, ChevronRightIcon
 } from './icons.jsx';
+import SourcesView from './SourcesView.jsx';
 
 /* Netflix-style match percentage: IMDb 8.7 → 87% */
 function matchPct(rating) {
@@ -181,6 +182,11 @@ function ListButton({ membership, onListAction }) {
 function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, resume }) {
   const isSeries = meta.type === 'series';
   const pct = matchPct(meta.imdbRating);
+  const [logoOk, setLogoOk] = useState(true);
+
+  // The show's logo art replaces the text title when Cinemeta has one;
+  // a broken/missing logo falls back to the text treatment.
+  useEffect(() => { setLogoOk(true); }, [meta.id]);
 
   // Stitch series title: last word gets the red gradient treatment
   const words = String(meta.name || '').trim().split(/\s+/);
@@ -194,25 +200,13 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, re
   return (
     <section
       data-testid="details-hero"
-      className="relative w-full bg-[#0a0a0a]"
+      className="relative w-full"
     >
-      {/* Backdrop art */}
-      <div className="absolute inset-0 overflow-hidden">
-        {meta.background || meta.poster ? (
-          <img
-            src={meta.background || meta.poster}
-            alt=""
-            referrerPolicy="no-referrer"
-            onError={(e) => e.currentTarget.remove()}
-            className="w-full h-full object-cover opacity-50"
-          />
-        ) : null}
-      </div>
-      {/* Cinematic scrims (to-t / to-r) + red bleed, per the Stitch screens.
-          The bleed blur is clipped by its OWN wrapper — the section itself
-          must NOT clip, or the add-to-list popup would be cut off. */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
-      <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/85 to-transparent" />
+      {/* The title's coverart is a WINDOW-level backdrop (App, fixed behind
+          everything) — the hero only layers the scrims that keep its own
+          text readable on top of it. */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/55 to-transparent" />
+      <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 blur-3xl" />
       </div>
@@ -239,18 +233,29 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, re
           ) : null}
         </div>
 
-        {/* Title */}
-        <h1
-          data-testid="details-title"
-          className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase drop-shadow-2xl mb-3 leading-none select-none"
-        >
-          {head}{lastWord ? ' ' : ''}
-          {lastWord ? (
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-red-600 to-accent">
-              {lastWord}
-            </span>
-          ) : null}
-        </h1>
+        {/* Title — the show's own logo art when available, text fallback */}
+        {meta.logo && logoOk ? (
+          <img
+            data-testid="details-logo"
+            src={meta.logo}
+            alt={meta.name}
+            referrerPolicy="no-referrer"
+            onError={() => setLogoOk(false)}
+            className="mb-3 max-h-[120px] max-w-[min(460px,88%)] w-auto object-contain object-left drop-shadow-[0_3px_16px_rgba(0,0,0,0.9)] select-none"
+          />
+        ) : (
+          <h1
+            data-testid="details-title"
+            className="text-4xl md:text-5xl font-black tracking-tight text-white uppercase drop-shadow-2xl mb-3 leading-none select-none"
+          >
+            {head}{lastWord ? ' ' : ''}
+            {lastWord ? (
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-red-600 to-accent">
+                {lastWord}
+              </span>
+            ) : null}
+          </h1>
+        )}
 
         {/* Meta pills */}
         <div className="flex flex-wrap items-center gap-2 mb-4 text-xs font-semibold text-gray-300">
@@ -479,7 +484,14 @@ function Episodes({ meta, onFindSources }) {
 
 /* ── DetailsView ─────────────────────────────────────────────────────── */
 
-export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
+export default function DetailsView({
+  meta,
+  onFindSources,
+  onPlayTrailer,
+  scan = { sources: [], providerCount: 0, summaryText: null, scanError: null },
+  onPlaySource,
+  onAutoScan
+}) {
   const isSeries = meta.type === 'series';
   const [membership, setMembership] = useState({ watched: false, want: false });
   const [resume, setResume] = useState(null);   // "S2 E5 · 28m left" | "42m left"
@@ -557,6 +569,14 @@ export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
       : { watched: false, want: false });
   }, [meta]);
 
+  // Movies: the sources list IS the page content — auto-shown with the
+  // search bar + filters, exactly like the sources screen. onAutoScan is
+  // the App-level no-op-unless-needed starter (openDetails starts the scan;
+  // this catches restarts, e.g. after a trailer stopScanned everything).
+  useEffect(() => {
+    if (!isSeries && onAutoScan) onAutoScan(meta);
+  }, [isSeries, onAutoScan, meta]);
+
   const playPrimary = () => {
     if (resumeEpRef.current) {
       onFindSources(resumeEpRef.current);
@@ -588,10 +608,12 @@ export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
         {isSeries ? (
           <Episodes meta={meta} onFindSources={onFindSources} />
         ) : (
-          <p className="text-xs text-gray-500">
-            Pick a source below to start streaming &mdash; Flux scans public
-            providers automatically for this title.
-          </p>
+          <SourcesView
+            meta={meta}
+            episode={{ title: meta.name, season: 1, episode: 1 }}
+            scan={scan}
+            onPlay={onPlaySource}
+          />
         )}
       </div>
     </div>

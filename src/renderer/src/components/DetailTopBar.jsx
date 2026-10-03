@@ -11,7 +11,9 @@ export default function DetailTopBar({
   crumbs, query, onQueryChange, onEnter, onClear, onBack
 }) {
   return (
-    <header className="app-drag flex items-center gap-4 bg-[#0a0a0a] px-8 py-3 shrink-0">
+    <header className="app-drag flex items-center gap-4 px-8 py-3 shrink-0 bg-gradient-to-b from-[#0a0a0a]/95 via-[#0a0a0a]/65 to-transparent">
+      {/* Transparent-over-art: the fixed window backdrop shows through the
+          top bar (original-repo detail look); without art this is black-on-black. */}
       <button
         data-testid="back-btn"
         title="Back"
