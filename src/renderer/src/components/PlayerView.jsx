@@ -1,20 +1,54 @@
-/* ── Player (Helix PlayerScreen equivalent) ──────────────────────────────
- * Direct HLS via hls.js / native <video>, MP4 native, DASH → unsupported
- * notice, embed sources in a <webview> (persist:embeds partition).
- * Subtitle overlay + menu come from the useSubtitles hook; the chrome
- * (top bar + controls) auto-hides in fullscreen after 2.6s of mouse idle.
+/* ── Player — Artplayer engine (robust open source, MIT) ─────────────────
+ * Playback chrome is Artplayer: play/pause, seek, volume, speed, aspect
+ * ratio, flip, PiP, settings panel, hotkeys, auto-hiding controls — on top
+ * of hls.js for HLS streams. Our custom subtitle pipeline is kept intact:
+ * external SRT/VTT/ASS variants + embedded HLS WebVTT tracks rendered by
+ * our own overlay, with delay / size / background wired into the
+ * Artplayer settings panel. Embed sources still use a <webview>
+ * (persist:embeds partition). Fullscreen targets the stage wrapper so the
+ * subtitle overlay + menu stay visible.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Artplayer from 'artplayer';
 import Hls from 'hls.js';
-import { fmtTime } from '../lib/format.js';
 import SubtitleMenu from './SubtitleMenu.jsx';
-import {
-  BackIcon, SwitchIcon, PlayIcon, PauseIcon,
-  VolumeIcon, MuteIcon, CCIcon, FullscreenIcon
-} from './icons.jsx';
+import { fmtDelay } from '../lib/format.js';
+import { BackIcon, SwitchIcon } from './icons.jsx';
 
 const CHROME_IDLE_MS = 2600;
+
+// Artplayer statics: no double-click fullscreen (it would hide our overlay
+// layer), no default context menu.
+Artplayer.DBCLICK_FULLSCREEN = false;
+Artplayer.CONTEXTMENU = false;
+
+const SUB_SIZES = [
+  { html: 'Small', scale: 0.85 },
+  { html: 'Medium', scale: 1 },
+  { html: 'Large', scale: 1.25 },
+  { html: 'X-Large', scale: 1.5 }
+];
+const SUB_BGS = [
+  { html: 'None', bg: 0 },
+  { html: 'Dim', bg: 0.4 },
+  { html: 'Dark', bg: 0.7 },
+  { html: 'Solid', bg: 1 }
+];
+const SUB_DELAYS = [
+  { html: '-2s', d: -2 }, { html: '-1s', d: -1 }, { html: '-0.5s', d: -0.5 },
+  { html: 'Sync', d: 0 },
+  { html: '+0.5s', d: 0.5 }, { html: '+1s', d: 1 }, { html: '+2s', d: 2 }
+];
+
+function ccSvg() {
+  const d = 'M19 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1z';
+  return '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="' + d + '"/></svg>';
+}
+function fsSvg() {
+  const d = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
+  return '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="' + d + '"/></svg>';
+}
 
 function hostOf(url) {
   try { return new URL(url).hostname; } catch (_err) { return ''; }
@@ -41,8 +75,10 @@ function applyPlayerRules(src, sources) {
 }
 
 export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
-  const videoRef = useRef(null);
-  const stageRef = useRef(null);
+  const containerRef = useRef(null);   // Artplayer mount point
+  const stageRef = useRef(null);       // fullscreen target (art + overlays)
+  const artRef = useRef(null);
+  const videoRef = useRef(null);       // art.video (progress + chrome logic)
   const hlsRef = useRef(null);
   const webviewRef = useRef(null);
   const failTimerRef = useRef(null);
@@ -55,27 +91,23 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
 
   const [buffering, setBuffering] = useState(true);
   const [failMsg, setFailMsg] = useState(null);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [cur, setCur] = useState('0:00');
-  const [dur, setDur] = useState('0:00');
-  const [seekPct, setSeekPct] = useState(0);
   const [overlayText, setOverlayText] = useState('');
   const [idle, setIdle] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [videoVisible, setVideoVisible] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);   // Artplayer mounted
 
   const isEmbed = source.format === 'Embed';
+  const isDash = source.format === 'DASH' || /\.mpd($|\?)/i.test(source.url);
 
   // refs mirroring state for use inside timers / event closures
   const submenuOpenRef = useRef(false);
   useEffect(() => { submenuOpenRef.current = submenuOpen; }, [submenuOpen]);
   const failMsgRef = useRef(null);
-  const videoVisibleRef = useRef(false);
   const idleRef = useRef(false);
   useEffect(() => { failMsgRef.current = failMsg; }, [failMsg]);
-  useEffect(() => { videoVisibleRef.current = videoVisible; }, [videoVisible]);
   useEffect(() => { idleRef.current = idle; }, [idle]);
+  const toggleSubmenuRef = useRef(() => {});
+  const saveProgressRef = useRef(() => {});
 
   const showPlayerFail = useCallback((msg) => {
     clearTimeout(failTimerRef.current);
@@ -84,14 +116,14 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     setFailMsg(msg || 'The stream may be offline or blocked. Try a different source below.');
   }, []);
 
-  // ── chrome auto-hide ───────────────────────────────────────────────────
+  // ── chrome auto-hide (our top bar, fullscreen only — Artplayer hides its
+  //    own control bar by itself) ──────────────────────────────────────────
   const chromeCanHide = useCallback(() => {
-    if (!document.fullscreenElement) return false;          // fullscreen only
+    if (!document.fullscreenElement) return false;
     if (failMsgRef.current) return false;
     if (submenuOpenRef.current) return false;
-    if (!videoVisibleRef.current) return false;
     const v = videoRef.current;
-    if (!v || v.paused) return false;                       // paused keeps chrome
+    if (!v || v.paused) return false;
     return true;
   }, []);
 
@@ -128,15 +160,16 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       durationSec: Math.round(video.duration)
     }).catch(() => {});
   }, [meta]);
+  useEffect(() => { saveProgressRef.current = saveProgress; }, [saveProgress]);
 
   useEffect(() => {
-    progressTimerRef.current = setInterval(saveProgress, 8000);
+    progressTimerRef.current = setInterval(() => saveProgressRef.current(), 8000);
     return () => {
       clearInterval(progressTimerRef.current);
       progressTimerRef.current = null;
-      saveProgress();                            // final tick on close/switch
+      saveProgressRef.current();               // final tick on close/switch
     };
-  }, [saveProgress]);
+  }, []);
 
   // ── subtitle context (re-applied when meta lands late on a resume) ─────
   useEffect(() => {
@@ -155,84 +188,215 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, episode, source]);
 
-  // ── open one source ────────────────────────────────────────────────────
+  // ── open one source (Artplayer + hls.js) ───────────────────────────────
   useEffect(() => {
-    // reset per-source state
     setBuffering(true);
     setFailMsg(null);
-    setVideoVisible(false);
     setOverlayText('');
-    setPlaying(false);
-    setSeekPct(0);
-    setCur('0:00');
-    setDur('0:00');
+    setVideoReady(false);
     playedOnceRef.current = false;
     resumeAppliedRef.current = false;          // re-arm the same-source resume seek
     stopChromeHide();
 
     applyPlayerRules(source, sources);
 
-    if (source.format === 'Embed') {
+    if (isEmbed) {
       // <webview> is rendered below; its event listeners attach in a
       // dedicated effect once the element exists.
       return undefined;
     }
 
-    const url = source.url;
-    const isHls = source.format === 'HLS' || /\.m3u8($|\?)/i.test(url);
-    const isDash = source.format === 'DASH' || /\.mpd($|\?)/i.test(url);
-    const video = videoRef.current;
-
     if (isDash) {
-      showPlayerFail('DASH streams aren\u2019t supported by the basic player yet. Pick another source below.');
+      showPlayerFail('DASH streams aren\u2019t supported by this player yet. Pick another source below.');
       return undefined;
     }
 
-    // If nothing renders within 25s, treat the host as dead
+    const isHls = source.format === 'HLS' || /\.m3u8($|\?)/i.test(source.url);
+    if (isHls && !Hls.isSupported()) {
+      showPlayerFail('HLS playback is not supported in this environment.');
+      return undefined;
+    }
+
+    // If nothing plays within 25s, treat the host as dead
     failTimerRef.current = setTimeout(() => {
       if (!playedOnceRef.current) {
         showPlayerFail('Timed out while contacting the stream host.');
       }
     }, 25000);
 
-    if (isHls && Hls.isSupported()) {
-      setVideoVisible(true);
-      const hls = new Hls({
-        enableWorker: true,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        // Subtitles are rendered by our own overlay (Helix-style styling +
-        // delay support) instead of native <track> elements.
-        renderTextTracksNatively: false
+    const style = subs.subsStyle || { scale: 1, bg: 0.7 };
+    const delayNow = subs.delay || 0;
+
+    let art;
+    try {
+      art = new Artplayer({
+        container: containerRef.current,
+        url: source.url,
+        type: isHls ? 'm3u8' : undefined,
+        customType: isHls ? {
+          m3u8: (video, url) => {
+            const hls = new Hls({
+              enableWorker: true,
+              backBufferLength: 90,
+              maxBufferLength: 30,
+              // Subtitles are rendered by our own overlay (styling + delay
+              // support) instead of native <track> elements.
+              renderTextTracksNatively: false
+            });
+            hlsRef.current = hls;
+            try { art.m3u8 = hls; } catch (_err) {}
+            subs.attachHls(hls);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              // Embedded WebVTT subtitle tracks → menu
+              subs.setEmbeddedTracks(hls);
+              video.play().catch(() => {});
+            });
+            hls.on(Hls.Events.CUES_PARSED, (_e, data) => subs.pushEmbeddedCues(data));
+            hls.on(Hls.Events.ERROR, (_e, data) => {
+              if (!data || !data.fatal) return;
+              if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                try { hls.recoverMediaError(); return; } catch (_err) {}
+              }
+              showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
+            });
+            hls.loadSource(url);
+            hls.attachMedia(video);
+          }
+        } : undefined,
+        autoplay: true,
+        volume: 1,
+        theme: '#e50914',
+        lang: 'en',
+        setting: true,
+        hotkey: true,
+        playbackRate: true,
+        aspectRatio: true,
+        flip: true,
+        pip: true,
+        mutex: false,
+        backdrop: true,
+        miniProgressBar: true,
+        autoMini: false,
+        autoSize: false,
+        moreVideoAttr: { playsInline: true },
+        settings: [
+          {
+            html: 'Subtitle size',
+            width: 230,
+            tooltip: (SUB_SIZES.find((s) => s.scale === style.scale) || SUB_SIZES[1]).html,
+            selector: SUB_SIZES.map((s) => ({
+              html: s.html, scale: s.scale, default: s.scale === style.scale
+            })),
+            onSelect(item) {
+              subs.setSubsStyle({ scale: item.scale });
+              return item.html;
+            }
+          },
+          {
+            html: 'Subtitle background',
+            width: 230,
+            tooltip: (SUB_BGS.find((s) => s.bg === style.bg) || SUB_BGS[2]).html,
+            selector: SUB_BGS.map((s) => ({
+              html: s.html, bg: s.bg, default: s.bg === style.bg
+            })),
+            onSelect(item) {
+              subs.setSubsStyle({ bg: item.bg });
+              return item.html;
+            }
+          },
+          {
+            html: 'Subtitle delay',
+            width: 230,
+            tooltip: fmtDelay(delayNow),
+            selector: SUB_DELAYS.map((s) => ({
+              html: s.html, d: s.d, default: s.d === delayNow
+            })),
+            onSelect(item) {
+              subs.setDelay(item.d);
+              return item.html;
+            }
+          }
+        ],
+        controls: [
+          {
+            name: 'flux-cc',
+            position: 'right',
+            index: 4,
+            html: ccSvg(),
+            tooltip: 'Subtitles',
+            click: () => { toggleSubmenuRef.current(); return ''; }
+          },
+          {
+            name: 'flux-fs',
+            position: 'right',
+            index: 6,
+            html: fsSvg(),
+            tooltip: 'Fullscreen',
+            click: () => {
+              if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+              } else if (stageRef.current) {
+                stageRef.current.requestFullscreen().catch(() => {});
+              }
+              return '';
+            }
+          }
+        ]
       });
-      hlsRef.current = hls;
-      subs.attachHls(hls);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // Embedded WebVTT subtitle tracks → menu (whitelisted languages only)
-        subs.setEmbeddedTracks(hls);
-        video.play().catch(() => {});
-      });
-      hls.on(Hls.Events.CUES_PARSED, (_e, data) => subs.pushEmbeddedCues(data));
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (!data || !data.fatal) return;
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          try { hls.recoverMediaError(); return; } catch (_err) {}
-        }
-        showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
-      });
-      hls.loadSource(url);
-      hls.attachMedia(video);
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      setVideoVisible(true);
-      video.src = url;
-      video.play().catch(() => {});
-    } else if (!isHls) {
-      setVideoVisible(true);
-      video.src = url;
-      video.play().catch(() => {});
-    } else {
-      showPlayerFail('HLS playback is not supported in this environment.');
+    } catch (err) {
+      showPlayerFail('The player failed to start (' + (err && err.message ? err.message : 'unknown') + ').');
+      return undefined;
     }
+
+    artRef.current = art;
+
+    // Resume seek target — applied once duration is known
+    const tryResumeSeek = () => {
+      const a = artRef.current;
+      const v = a && a.video;
+      if (!a || !v) return;
+      if (!resumeAppliedRef.current && resumeSecRef.current > 5 &&
+          Number.isFinite(v.duration) && v.duration > 0) {
+        resumeAppliedRef.current = true;
+        try {
+          v.currentTime = Math.min(resumeSecRef.current, Math.max(0, v.duration - 5));
+        } catch (_err) {}
+      }
+    };
+
+    art.on('ready', () => {
+      const v = art.video;
+      videoRef.current = v;
+      try { v.setAttribute('data-testid', 'player-video'); } catch (_err) {}
+      // stable hooks for the UI tests (same ids as before)
+      const tag = (sel, id) => {
+        const el = containerRef.current && containerRef.current.querySelector(sel);
+        if (el) el.id = id;
+      };
+      tag('.art-control-playAndPause', 'pc-play');
+      tag('.art-control-flux-cc', 'pc-cc');
+      tag('.art-control-flux-fs', 'pc-fs');
+      tag('.art-controls', 'player-controls');
+      setVideoReady(true);
+      tryResumeSeek();
+    });
+    art.on('video:loadedmetadata', tryResumeSeek);
+    art.on('video:playing', () => {
+      playedOnceRef.current = true;
+      clearTimeout(failTimerRef.current);
+      failTimerRef.current = null;
+      setBuffering(false);
+      setFailMsg(null);
+    });
+    art.on('video:waiting', () => {
+      if (!failMsgRef.current) setBuffering(true);
+    });
+    art.on('video:pause', () => { saveProgressRef.current(); });
+    art.on('video:error', () => {
+      const v = art.video;
+      if (!v || !v.currentSrc) return;          // teardown clears src — ignore
+      showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
+    });
 
     // Auto-fetch subtitles for this episode/movie (Helix _fetchInitialSubtitles)
     subs.search(false);
@@ -240,6 +404,13 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     return () => {
       clearTimeout(failTimerRef.current);
       failTimerRef.current = null;
+      const hls = hlsRef.current;
+      if (hls) { try { hls.destroy(); } catch (_err) {} hlsRef.current = null; }
+      subs.detachHls();
+      try { art.destroy(true); } catch (_err) {}
+      artRef.current = null;
+      videoRef.current = null;
+      setVideoReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
@@ -268,23 +439,11 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   // ── teardown on unmount (closePlayer) ─────────────────────────────────
   useEffect(() => {
     return () => {
-      const hls = hlsRef.current;
-      if (hls) { try { hls.destroy(); } catch (_err) {} hlsRef.current = null; }
-      subs.detachHls();
       clearTimeout(failTimerRef.current);
       clearTimeout(idleTimerRef.current);
-
-      const video = videoRef.current;
-      if (video) {
-        try { video.pause(); } catch (_err) {}
-        video.removeAttribute('src');
-        try { video.load(); } catch (_err) {}
-      }
       const wv = webviewRef.current;
       if (wv) { try { wv.stop(); } catch (_err) {} }
-
       subs.stopInFlight();
-
       const api = window.fluxAPI;
       if (api && typeof api.clearPlayerRules === 'function') api.clearPlayerRules();
     };
@@ -306,7 +465,26 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, [wakeChrome, stopChromeHide]);
 
-  // ── overlay text recompute when subs state changes ─────────────────────
+  // ── overlay text on timeupdate ─────────────────────────────────────────
+  useEffect(() => {
+    if (!videoReady) return undefined;
+    const art = artRef.current;
+    if (!art) return undefined;
+    const onTime = () => {
+      const v = art.video;
+      if (!v) return;
+      setOverlayText((prev) => {
+        const next = subs.getOverlayText(v.currentTime);
+        return next === prev ? prev : next;
+      });
+    };
+    art.on('video:timeupdate', onTime);
+    return () => {
+      try { art.off('video:timeupdate', onTime); } catch (_err) {}
+    };
+  }, [videoReady, subs]);
+
+  // ── overlay recompute when subs state changes ──────────────────────────
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -314,7 +492,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       const next = subs.getOverlayText(v.currentTime);
       return next === prev ? prev : next;
     });
-  }, [subs.cuesVersion, subs.delay, subs.selectedUrl, subs.embeddedActive, subs]);
+  }, [subs.cuesVersion, subs.delay, subs.selectedUrl, subs.embeddedActive, subs.subsStyle, subs]);
 
   // ── subtitle menu helpers (open state lifted to App for the Esc chain) ─
   const closeSubmenu = useCallback(() => {
@@ -330,6 +508,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       closeSubmenu();
     }
   }, [wakeChrome, onToggleSubmenu, closeSubmenu]);
+  useEffect(() => { toggleSubmenuRef.current = toggleSubmenu; }, [toggleSubmenu]);
 
   // ── header text ────────────────────────────────────────────────────────
   const isSeries = meta && meta.type === 'series';
@@ -344,42 +523,8 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     source.title || source.provider || 'Source'
   ].filter(Boolean).join('  \u2014  ');
 
-  // ── video events ───────────────────────────────────────────────────────
-  const handleTimeUpdate = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const text = fmtTime(video.currentTime);
-    setCur((prev) => (prev === text ? prev : text));
-    const d = video.duration;
-    if (Number.isFinite(d) && d > 0) {
-      const pct = (video.currentTime / d) * 100;
-      setSeekPct((prev) => (Math.abs(prev - pct) > 0.05 ? pct : prev));
-    }
-    setOverlayText((prev) => {
-      const next = subs.getOverlayText(video.currentTime);
-      return next === prev ? prev : next;
-    });
-  };
-
-  const handlePlaying = () => {
-    playedOnceRef.current = true;
-    clearTimeout(failTimerRef.current);
-    failTimerRef.current = null;
-    setBuffering(false);
-    setFailMsg(null);
-  };
-
-  const handleWaiting = () => {
-    if (!failMsgRef.current) setBuffering(true);
-  };
-
-  const handleError = () => {
-    const video = videoRef.current;
-    if (!video || !video.currentSrc) return;      // teardown clears src — ignore
-    showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
-  };
-
   const chromeHidden = idle && fullscreen;
+  const style = subs.subsStyle || { scale: 1, bg: 0.7 };
 
   return (
     <div
@@ -401,6 +546,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     >
       {/* top bar */}
       <div
+        data-testid="player-topbar"
         className={
           'flex items-center gap-4 px-5 py-3 bg-black/60 backdrop-blur z-10 transition-opacity duration-500 ' +
           (chromeHidden ? 'opacity-0 pointer-events-none' : 'opacity-100')
@@ -431,38 +577,10 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         </button>
       </div>
 
-      {/* stage */}
+      {/* stage — the fullscreen target, holds the player AND the overlays */}
       <div ref={stageRef} data-testid="player-stage" className="relative flex-1 bg-black overflow-hidden">
         {!isEmbed ? (
-          <video
-            ref={videoRef}
-            data-testid="player-video"
-            playsInline
-            onPlay={() => { setPlaying(true); scheduleChromeHide(); }}
-            onPause={() => { setPlaying(false); wakeChrome(); saveProgress(); }}
-            onLoadedMetadata={() => {
-              const v = videoRef.current;
-              if (v) {
-                setDur(fmtTime(v.duration));
-                // same-source resume: jump to where you left off (once)
-                if (!resumeAppliedRef.current && resumeSecRef.current > 5 &&
-                    Number.isFinite(v.duration) && v.duration > 0) {
-                  resumeAppliedRef.current = true;
-                  try {
-                    v.currentTime = Math.min(resumeSecRef.current, Math.max(0, v.duration - 5));
-                  } catch (_err) {}
-                }
-              }
-            }}
-            onTimeUpdate={handleTimeUpdate}
-            onPlaying={handlePlaying}
-            onWaiting={handleWaiting}
-            onError={handleError}
-            className={
-              'absolute inset-0 w-full h-full bg-black ' +
-              (videoVisible ? '' : 'hidden')
-            }
-          />
+          <div ref={containerRef} data-testid="player-art" className="absolute inset-0" />
         ) : (
           <webview
             ref={webviewRef}
@@ -478,9 +596,15 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         {overlayText ? (
           <div
             data-testid="player-sub-overlay"
-            className="absolute bottom-[72px] left-0 right-0 flex justify-center px-10 pointer-events-none z-10"
+            className="absolute bottom-[84px] left-0 right-0 flex justify-center px-10 pointer-events-none z-10"
           >
-            <span className="max-w-3xl bg-black/70 rounded-lg px-4 py-1.5 text-center text-lg leading-snug text-white whitespace-pre-line">
+            <span
+              className="max-w-3xl rounded-lg px-4 py-1.5 text-center leading-snug text-white whitespace-pre-line"
+              style={{
+                fontSize: Math.round(18 * style.scale) + 'px',
+                background: 'rgba(0, 0, 0, ' + style.bg + ')'
+              }}
+            >
               {overlayText}
             </span>
           </div>
@@ -502,7 +626,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         {buffering && !failMsg ? (
           <div
             data-testid="player-buffering"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-dim"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-dim pointer-events-none"
           >
             <div className="spinner spinner-lg" />
             <p>Loading stream&hellip;</p>
@@ -513,7 +637,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         {failMsg ? (
           <div
             data-testid="player-fail"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6 bg-black/70 z-10"
           >
             <h3 className="text-xl font-semibold">This source couldn&rsquo;t be played</h3>
             <p data-testid="player-fail-msg" className="text-dim max-w-md">{failMsg}</p>
@@ -523,90 +647,6 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
               className="mt-2 rounded-xl bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
             >
               Pick another source
-            </button>
-          </div>
-        ) : null}
-
-        {/* controls */}
-        {videoVisible ? (
-          <div
-            data-testid="player-controls"
-            className={
-              'absolute bottom-0 left-0 right-0 flex items-center gap-3 px-5 py-3 bg-gradient-to-t from-black/85 to-transparent z-10 transition-opacity duration-500 ' +
-              (chromeHidden ? 'opacity-0 pointer-events-none' : 'opacity-100')
-            }
-          >
-            <button
-              id="pc-play"
-              data-testid="pc-play"
-              title="Play/Pause"
-              aria-label="Play or pause"
-              onClick={() => {
-                const v = videoRef.current;
-                if (!v) return;
-                if (v.paused) v.play().catch(() => {});
-                else v.pause();
-              }}
-              className="text-ink hover:text-accent"
-            >
-              {playing ? <PauseIcon /> : <PlayIcon size={22} />}
-            </button>
-            <span data-testid="pc-cur" className="text-xs text-dim tabular-nums">{cur}</span>
-            <input
-              id="pc-seek"
-              data-testid="pc-seek"
-              type="range"
-              min="0"
-              max="100"
-              step="0.1"
-              value={seekPct}
-              aria-label="Seek"
-              onChange={(e) => {
-                const v = videoRef.current;
-                const d = v ? v.duration : NaN;
-                if (v && Number.isFinite(d) && d > 0) {
-                  v.currentTime = (parseFloat(e.target.value) / 100) * d;
-                }
-                wakeChrome();
-              }}
-              className="seek flex-1"
-            />
-            <span data-testid="pc-dur" className="text-xs text-dim tabular-nums">{dur}</span>
-            <button
-              data-testid="pc-mute"
-              title="Mute/Unmute"
-              aria-label="Mute or unmute"
-              onClick={() => {
-                const v = videoRef.current;
-                if (!v) return;
-                v.muted = !v.muted;
-                setMuted(v.muted);
-              }}
-              className="text-ink hover:text-accent"
-            >
-              {muted ? <MuteIcon /> : <VolumeIcon />}
-            </button>
-            <button
-              id="pc-cc"
-              data-testid="pc-cc"
-              title="Subtitles"
-              aria-label="Toggle subtitle menu"
-              onClick={toggleSubmenu}
-              className={(subs.hasActive ? 'text-accent' : 'text-ink') + ' hover:text-accent'}
-            >
-              <CCIcon />
-            </button>
-            <button
-              data-testid="pc-fs"
-              title="Fullscreen"
-              aria-label="Toggle fullscreen"
-              onClick={() => {
-                if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-                else if (stageRef.current) stageRef.current.requestFullscreen().catch(() => {});
-              }}
-              className="text-ink hover:text-accent"
-            >
-              <FullscreenIcon />
             </button>
           </div>
         ) : null}

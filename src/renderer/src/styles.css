@@ -91,34 +91,6 @@ body {
   background: transparent;
 }
 
-/* Seek slider (player controls) */
-.seek {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.25);
-  outline: none;
-  cursor: pointer;
-}
-.seek::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  border: none;
-  box-shadow: 0 0 6px rgba(229, 9, 20, 0.55);
-}
-.seek::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  border: none;
-}
-
 /* Home skeleton shimmer */
 @keyframes flux-shimmer {
   0% {
@@ -189,14 +161,14 @@ body {
   animation: flux-spin 0.8s linear infinite;
 }
 
-/* Hero bottom shade (details view) */
-.hero-shade {
-  background: linear-gradient(
-    180deg,
-    rgba(17, 20, 30, 0) 0%,
-    rgba(17, 20, 30, 0.55) 55%,
-    rgba(17, 20, 30, 0.96) 100%
-  );
+/* ── Artplayer integration (player engine) ─────────────────────────────
+   Hide Artplayer's loading ring — Flux shows its own Stitch spinner — and
+   keep the stage pure black. */
+.art-video-player .art-loading {
+  display: none !important;
+}
+.art-video-player {
+  background: #000;
 }
 
 /* ── Backdrop cards (Stitch): 16:9 art + bottom gradient + uppercase title */

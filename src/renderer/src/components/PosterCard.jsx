@@ -1,6 +1,7 @@
 /* ── Cards: poster (grids) + backdrop (home rows, Stitch style) ─────────── */
 
 import { useState } from 'react';
+import { FilmIcon } from './icons.jsx';
 
 /* Poster card — 2:3 art for search results and the Watched grid */
 export default function PosterCard({ item, onClick, testid }) {
@@ -26,8 +27,8 @@ export default function PosterCard({ item, onClick, testid }) {
             className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-3xl text-dim">
-            🎬
+          <div className="absolute inset-0 flex items-center justify-center text-dim">
+            <FilmIcon size={34} />
           </div>
         )}
 

@@ -26,6 +26,7 @@ export function useSubtitles() {
   const [menuNotice, setMenuNotice] = useState(null);
   const [selectedUrl, setSelectedUrl] = useState(null); // downloadUrl of selected variant
   const [cuesVersion, setCuesVersion] = useState(0);    // bump → overlay recompute
+  const [subsStyle, setSubsStyleState] = useState({ scale: 1, bg: 0.7 }); // overlay look
 
   const groupsRef = useRef([]);
   const selectedRef = useRef(null);
@@ -190,6 +191,12 @@ export function useSubtitles() {
     setCuesVersion((v) => v + 1);     // re-evaluate the visible cue immediately
   }, []);
 
+  // Overlay look (size + background) — a user preference, survives episode
+  // and source switches; wired to the player's settings panel.
+  const setSubsStyle = useCallback((patch) => {
+    setSubsStyleState((prev) => ({ ...prev, ...patch }));
+  }, []);
+
   // ── embedded HLS tracks (MANIFEST_PARSED / CUES_PARSED) ────────────────
   const setEmbeddedTracks = useCallback((hls) => {
     try {
@@ -285,9 +292,9 @@ export function useSubtitles() {
   return {
     // state
     groups, pending, loadingUrl, embedded, embeddedActive, delay, menuNotice,
-    selectedUrl, cuesVersion, hasActive,
+    selectedUrl, cuesVersion, hasActive, subsStyle,
     // actions
-    setContext, search, off, selectVariant, selectEmbedded, setDelay,
+    setContext, search, off, selectVariant, selectEmbedded, setDelay, setSubsStyle,
     setEmbeddedTracks, pushEmbeddedCues, attachHls, detachHls,
     resetForEpisode, stopInFlight, getOverlayText
   };

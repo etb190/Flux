@@ -1,8 +1,12 @@
-/* ── Sources view: scan status, filters, provider results ──────────────── */
+/* ── Sources view — Stitch "Available Streaming Sources & Mirrors" section ─
+ * Section header with the red server glyph + operational badge, filter row,
+ * and server cards: icon tile, name, format/quality chips, meta line and a
+ * red "Stream Now" action. The first direct source gets the recommended
+ * red-gradient treatment from the Stitch screen. */
 
 import { useMemo, useState } from 'react';
 import { GB, fmtSize } from '../lib/format.js';
-import { PlayIcon, SearchIcon } from './icons.jsx';
+import { PlayIcon, SearchIcon, DnsIcon, BoltIcon, CloudIcon, LinkIcon, FilmIcon } from './icons.jsx';
 
 function hostOf(url) {
   try {
@@ -12,7 +16,7 @@ function hostOf(url) {
   }
 }
 
-function SourceRow({ src, onPlay }) {
+function SourceRow({ src, recommended, onPlay }) {
   const formatClass =
     src.format === 'Embed'
       ? 'bg-series/15 text-series'
@@ -22,43 +26,84 @@ function SourceRow({ src, onPlay }) {
           ? 'bg-gold/15 text-gold'
           : 'bg-movie/15 text-movie';
   const sizeLabel = fmtSize(src.sizeBytes);
+  const host = hostOf(src.url);
+  const tile = src.format === 'Embed'
+    ? <LinkIcon size={20} />
+    : src.format === 'HLS'
+      ? <BoltIcon size={20} />
+      : src.format === 'DASH'
+        ? <FilmIcon size={20} />
+        : <CloudIcon size={20} />;
 
   return (
     <div
       data-testid="source-row"
       onClick={() => onPlay(src)}
       className={
-        'flex items-center gap-3.5 p-3 rounded-xl bg-raised border border-edge cursor-pointer transition-colors hover:bg-hover hover:border-accent/50 ' +
-        (src.format === 'Embed' ? 'opacity-90' : '')
+        'group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl border cursor-pointer transition-all duration-200 ' +
+        (recommended
+          ? 'bg-gradient-to-r from-red-950/30 via-[#161a26] to-[#161a26] border-red-500/30 hover:border-red-500/60'
+          : 'bg-[#14161f] hover:bg-[#191d2c] border-white/5 hover:border-white/15') +
+        (src.format === 'Embed' ? ' opacity-90' : '')
       }
     >
-      <div className="w-10 h-10 rounded-lg bg-hover border border-edge flex items-center justify-center text-base font-bold text-accent shrink-0">
-        {(src.provider || '?').charAt(0).toUpperCase()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[15px] font-medium text-ink truncate max-w-full">
-            {src.title || src.provider || 'Source'}
-          </span>
-          <span className={'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ' + formatClass}>
-            {src.format || 'LINK'}
-          </span>
-          {src.quality ? (
-            <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-dim">
-              {src.quality}
+      <div className="flex items-center gap-4 min-w-0">
+        <div
+          className={
+            'w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ' +
+            (recommended
+              ? 'bg-accent/20 text-accent'
+              : 'bg-[#1c2233] text-[#8b94a9]')
+          }
+        >
+          {tile}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-white truncate max-w-full">
+              {src.title || src.provider || 'Source'}
             </span>
-          ) : null}
-          {sizeLabel ? (
-            <span className="text-[11px] text-dim">{sizeLabel}</span>
-          ) : null}
-        </div>
-        <div className="text-xs text-dim mt-0.5 truncate">
-          {[src.description, hostOf(src.url)].filter(Boolean).join(' \u00b7 ')}
+            {recommended ? (
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-accent text-white uppercase tracking-wider">
+                Recommended
+              </span>
+            ) : null}
+            <span className={'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ' + formatClass}>
+              {src.format || 'LINK'}
+            </span>
+            {src.quality ? (
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                {src.quality}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-[#677189] mt-1.5 flex-wrap">
+            {src.description ? (
+              <span className="text-[#aab2c5] font-medium">{src.description}</span>
+            ) : null}
+            {host ? (
+              <>
+                {src.description ? <span>&bull;</span> : null}
+                <span>{host}</span>
+              </>
+            ) : null}
+            {sizeLabel ? (
+              <>
+                <span>&bull;</span>
+                <span className="font-mono">{sizeLabel}</span>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
-      <div className="text-dim shrink-0 pr-1">
-        <PlayIcon size={20} />
-      </div>
+      <button
+        data-testid="source-play"
+        title="Play this source"
+        className="px-4 sm:px-5 py-2.5 rounded-lg bg-accent hover:bg-red-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm shadow-red-600/20 shrink-0 self-start sm:self-auto"
+      >
+        <PlayIcon size={15} />
+        Stream Now
+      </button>
     </div>
   );
 }
@@ -111,19 +156,40 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
 
   const showEmpty = scan.summaryText !== null && scan.sources.length === 0;
   const showNomatch = scan.sources.length > 0 && shown === 0;
+  const rows = direct.concat(embeds);
+  const scanning = scan.summaryText === null && !scan.scanError;
 
   return (
-    <div data-testid="sources-view" className="px-8 pb-10">
-      <div className="mt-1 mb-4">
-        <h2 data-testid="sources-title" className="text-xl font-semibold">{title}</h2>
-        <div data-testid="sources-sub" className="text-sm text-dim mt-0.5">{meta.name}</div>
+    <div data-testid="sources-view" className="detail-page flex-1 px-8 py-7">
+      {/* Section header (Stitch "Available Streaming Sources & Mirrors") */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="min-w-0">
+          <h2
+            data-testid="sources-title"
+            className="text-lg font-bold text-white flex items-center gap-2"
+          >
+            <span className="text-accent shrink-0"><DnsIcon size={20} /></span>
+            <span className="truncate">Available Streaming Sources &amp; Mirrors</span>
+          </h2>
+          <p data-testid="sources-sub" className="text-xs text-[#8b94a9] mt-0.5 truncate">
+            {title} &mdash; {meta.name} &middot; pick a node for the best playback quality
+          </p>
+        </div>
+        {scan.sources.length > 0 && !scanning ? (
+          <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-medium flex items-center gap-2 border border-emerald-500/20 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            {scan.sources.length} source{scan.sources.length > 1 ? 's' : ''} operational
+          </span>
+        ) : scanning ? (
+          <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 font-medium flex items-center gap-2 border border-amber-500/20 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
+            Scanning
+          </span>
+        ) : null}
       </div>
 
-      <div data-testid="sources-status" className="text-sm text-dim mb-3">
-        {status}
-      </div>
-
-      <div className="flex items-center gap-3 mb-4">
+      {/* Filters */}
+      <div className="flex items-center gap-3 my-4">
         <div className="relative flex-1 max-w-sm">
           <SearchIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
           <input
@@ -134,7 +200,7 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
             autoComplete="off"
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg bg-raised border border-edge pl-8 pr-3 py-2 text-sm text-ink outline-none placeholder:text-dim focus:border-accent"
+            className="w-full rounded-lg bg-search border border-edge pl-8 pr-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-[#3a445c]"
           />
         </div>
         <select
@@ -143,12 +209,16 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
           aria-label="Filter by size"
           value={sizeFilter}
           onChange={(e) => setSizeFilter(e.target.value)}
-          className="rounded-lg bg-raised border border-edge px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+          className="detail-select"
         >
           <option value="all">All sizes</option>
           <option value="gt1gb">Greater than 1 GB</option>
           <option value="lt1gb">Less than 1 GB</option>
         </select>
+      </div>
+
+      <div data-testid="sources-status" className="text-sm text-dim mb-3">
+        {status}
       </div>
 
       {showEmpty ? (
@@ -163,9 +233,15 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
         </div>
       ) : null}
 
-      <div data-testid="sources-list" className="flex flex-col gap-2.5">
-        {direct.concat(embeds).map((src, i) => (
-          <SourceRow key={src.url + i} src={src} onPlay={onPlay} />
+      {/* Server cards stack */}
+      <div data-testid="sources-list" className="flex flex-col gap-3">
+        {rows.map((src, i) => (
+          <SourceRow
+            key={src.url + i}
+            src={src}
+            recommended={i === 0 && src.format !== 'Embed' && !showNomatch}
+            onPlay={onPlay}
+          />
         ))}
       </div>
     </div>

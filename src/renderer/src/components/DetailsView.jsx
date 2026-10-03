@@ -454,7 +454,7 @@ export default function DetailsView({ meta, onFindSources }) {
   };
 
   return (
-    <div data-testid="details-content" className="detail-page -mx-8 px-8 -mt-4 pt-4 pb-12 min-h-full">
+    <div data-testid="details-content" className="detail-page flex-1 flex flex-col pb-12 min-h-full">
       <Hero
         meta={meta}
         resume={resume}
@@ -463,7 +463,7 @@ export default function DetailsView({ meta, onFindSources }) {
         onPlayPrimary={playPrimary}
       />
 
-      <div className="px-0 py-8 space-y-9">
+      <div className="px-8 py-8 space-y-9">
         <Overview meta={meta} />
 
         {isSeries ? (

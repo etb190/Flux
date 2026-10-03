@@ -12,11 +12,11 @@ import HomeView from './components/HomeView.jsx';
 import WatchedView from './components/WatchedView.jsx';
 import ResultsView from './components/ResultsView.jsx';
 import DetailsView from './components/DetailsView.jsx';
+import DetailTopBar from './components/DetailTopBar.jsx';
 import SourcesView from './components/SourcesView.jsx';
 import PlayerView from './components/PlayerView.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import { LoadingPane, ErrorPane, EmptyPane } from './components/ui.jsx';
-import { BackIcon } from './components/icons.jsx';
 import { useHome } from './hooks/useHome.js';
 import { useSearch } from './hooks/useSearch.js';
 import { useStreams } from './hooks/useStreams.js';
@@ -86,6 +86,12 @@ export default function App() {
     setActiveSource(null);
     streams.stopScan();
     setView('loading');
+    // The details-layer search field unmounts with the details flow — move
+    // focus to the freshly mounted top bar input so typing continues.
+    setTimeout(() => {
+      const input = document.getElementById('search');
+      if (input) input.focus();
+    }, 120);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streams]);
 
@@ -304,8 +310,7 @@ export default function App() {
           setSubmenuOpen(false);             // Esc in subtitle menu → close it
           return;
         }
-        setSubmenuOpen(false);
-        setActiveSource(null);               // Esc in player → back to sources
+        closePlayer();                       // Esc in player → same as Back
         return;
       }
       if (viewRef.current === 'sources') {
@@ -328,7 +333,7 @@ export default function App() {
 
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [closeSources, closeDetails, goHome]);
+  }, [closePlayer, closeSources, closeDetails, goHome]);
 
   // ── settings saved → home refetches with the new key/country ──────────
   const handleSettingsSaved = useCallback(() => {
@@ -340,20 +345,48 @@ export default function App() {
   const inDetailsFlow = view === 'details-loading' || view === 'details-error' ||
     view === 'details' || view === 'sources';
 
+  // Breadcrumb for the details-layer top bar (Stitch screens:
+  // "Movies | Sci-Fi & Fantasy | Interstellar")
+  const detailCrumbs = (() => {
+    if ((view === 'details' || view === 'sources') && meta) {
+      const kind = meta.type === 'series' ? 'TV Shows' : 'Movies';
+      if (view === 'sources' && episode) {
+        const epLabel = meta.type === 'series'
+          ? 'S' + (episode.season ?? 1) + ' E' + (episode.episode ?? 1) +
+            (episode.title ? ' \u00b7 ' + episode.title : '')
+          : (episode.title || 'Now playing');
+        return [kind, meta.name, epLabel].filter(Boolean);
+      }
+      return [kind, (meta.genres || [])[0], meta.name].filter(Boolean);
+    }
+    if (view === 'details-loading') return ['Loading\u2026'];
+    return ['Details unavailable'];
+  })();
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-ink font-sans">
       <SideBar active={homeTab} onTab={setHomeTab} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar
-          query={query}
-          onQueryChange={handleQueryChange}
-          onEnter={handleQueryEnter}
-          onClear={handleQueryClear}
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
+        {/* The app top bar lives ONLY on non-details views — the movie/TV
+            screen is ONE layer with its own controls inside the content. */}
+        {!inDetailsFlow ? (
+          <TopBar
+            query={query}
+            onQueryChange={handleQueryChange}
+            onEnter={handleQueryEnter}
+            onClear={handleQueryClear}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        ) : null}
 
-        <main ref={contentRef} className="flex-1 overflow-y-auto scroll-dark relative px-8 pt-4 pb-2">
+        <main
+          ref={contentRef}
+          className={
+            'flex-1 overflow-y-auto scroll-dark relative ' +
+            (inDetailsFlow ? 'flex flex-col p-0' : 'px-8 pt-4 pb-2')
+          }
+        >
           {view === 'home' ? (
             homeTab === 'watched' ? (
               <WatchedView onOpen={(item) => openDetails(item, 'home')} />
@@ -384,22 +417,21 @@ export default function App() {
           ) : null}
 
           {inDetailsFlow ? (
-            <section data-testid="details">
-              <div className="pt-1 pb-2">
-                <button
-                  data-testid="back-btn"
-                  title="Back"
-                  aria-label="Back"
-                  onClick={() => {
-                    if (view === 'sources') closeSources();
-                    else closeDetails();
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg bg-raised border border-edge px-3 py-1.5 text-dim hover:text-ink hover:border-[#323a52] transition-colors"
-                >
-                  <BackIcon />
-                  <span className="text-[13.5px] font-medium">Back</span>
-                </button>
-              </div>
+            <section data-testid="details" className="flex flex-col min-h-full">
+              {/* One layer: back / breadcrumb / search / settings are part of
+                  the content layer (Stitch detail screens), not app chrome. */}
+              <DetailTopBar
+                crumbs={detailCrumbs}
+                query={query}
+                onQueryChange={handleQueryChange}
+                onEnter={handleQueryEnter}
+                onClear={handleQueryClear}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onBack={() => {
+                  if (view === 'sources') closeSources();
+                  else closeDetails();
+                }}
+              />
 
               {view === 'details-loading' ? (
                 <LoadingPane label={'Loading details\u2026'} testid="details-loading" />

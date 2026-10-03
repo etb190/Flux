@@ -79,7 +79,7 @@ function CarouselRow({ title, children, testid }) {
           </div>
         )}
       </div>
-      <div ref={scrollerRef} className="row-scroll flex gap-0 py-2.5 -my-1 overflow-x-auto -mx-1 px-1">
+      <div ref={scrollerRef} className="row-scroll flex gap-[3px] py-2.5 -my-1 overflow-x-auto -mx-1 px-1">
         {children}
       </div>
     </section>
@@ -290,13 +290,13 @@ function Skeleton() {
   return (
     <div data-testid="home-loading" className="-mt-6">
       <div className="skeleton h-3.5 w-40 mt-8" />
-      <div className="flex gap-0 mt-4 overflow-hidden">
+      <div className="flex gap-[3px] mt-4 overflow-hidden">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="skeleton w-[236px] aspect-[16/9] shrink-0" />
         ))}
       </div>
       <div className="skeleton h-3.5 w-40 mt-8" />
-      <div className="flex gap-0 mt-4 overflow-hidden pb-6">
+      <div className="flex gap-[3px] mt-4 overflow-hidden pb-6">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="skeleton w-[236px] aspect-[16/9] shrink-0" />
         ))}
