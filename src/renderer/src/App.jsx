@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import TitleBar from './components/TitleBar.jsx';
 import TopBar from './components/TopBar.jsx';
 import SideBar from './components/SideBar.jsx';
 import HomeView from './components/HomeView.jsx';
@@ -29,7 +30,7 @@ export default function App() {
   const [episode, setEpisode] = useState(null);
   const [activeSource, setActiveSource] = useState(null);
   const [submenuOpen, setSubmenuOpen] = useState(false);
-  const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|watched
+  const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|watched|want
 
   const home = useHome();
   const search = useSearch();
@@ -359,8 +360,8 @@ export default function App() {
         closeDetails();                      // Esc in details → back to results/home
         return;
       }
-      if (homeTabRef.current === 'watched') {
-        setHomeTab('feed');                  // Esc in the Watched tab → Home feed
+      if (homeTabRef.current !== 'feed') {
+        setHomeTab('feed');                  // Esc in Watched/Want tab → Home feed
         return;
       }
       setQuery('');
@@ -395,10 +396,15 @@ export default function App() {
   })();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-ink font-sans">
-      <SideBar active={homeTab} onTab={handleSideTab} />
+    <div className="flex flex-col h-screen overflow-hidden bg-bg text-ink font-sans">
+      {/* Custom frameless-window chrome: black bar, FLUX brand, custom
+          minimize / maximize / close (the OS title bar is gone) */}
+      <TitleBar />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex flex-1 min-h-0">
+        <SideBar active={homeTab} onTab={handleSideTab} />
+
+        <div className="flex-1 flex flex-col min-w-0">
         {/* The app top bar lives ONLY on non-details views — the movie/TV
             screen is ONE layer with its own controls inside the content. */}
         {!inDetailsFlow ? (
@@ -419,7 +425,9 @@ export default function App() {
         >
           {view === 'home' ? (
             homeTab === 'watched' ? (
-              <WatchedView onOpen={(item) => openDetails(item, 'home')} />
+              <WatchedView list="watched" onOpen={(item) => openDetails(item, 'home')} />
+            ) : homeTab === 'want' ? (
+              <WatchedView list="want" onOpen={(item) => openDetails(item, 'home')} />
             ) : (
               <HomeView
                 home={home}
@@ -490,6 +498,7 @@ export default function App() {
             </section>
           ) : null}
         </main>
+        </div>
       </div>
 
       {activeSource ? (

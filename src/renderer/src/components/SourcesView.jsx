@@ -3,9 +3,12 @@
  * and uniform server cards: icon tile, name, format/quality chips, meta line
  * and a red "Stream Now" action. No source is singled out as recommended. */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GB, fmtSize } from '../lib/format.js';
-import { PlayIcon, SearchIcon, DnsIcon, BoltIcon, CloudIcon, LinkIcon, FilmIcon } from './icons.jsx';
+import {
+  PlayIcon, SearchIcon, DnsIcon, BoltIcon, CloudIcon, LinkIcon, FilmIcon,
+  ChevronDownIcon, CheckIcon
+} from './icons.jsx';
 
 function hostOf(url) {
   try {
@@ -13,6 +16,97 @@ function hostOf(url) {
   } catch (_err) {
     return '';
   }
+}
+
+/* ── Size filter — custom square dropdown ─────────────────────────────
+ * The native <select> popup is drawn by Windows and stays ROUNDED no
+ * matter what CSS says, so the dropdown is rebuilt as a button + popup
+ * list inside the DOM (the zero-border-radius rule covers it).
+ */
+const SIZE_OPTIONS = [
+  { id: 'all', label: 'All sizes' },
+  { id: 'gt1gb', label: 'Greater than 1 GB' },
+  { id: 'lt1gb', label: 'Less than 1 GB' }
+];
+
+function SizeSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const current = SIZE_OPTIONS.find((o) => o.id === value) || SIZE_OPTIONS[0];
+
+  // Outside click closes; Esc closes ONLY the popup (capture handler
+  // swallows the keydown so the app-level Esc chain doesn't fire too).
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0">
+      <button
+        id="sources-size"
+        data-testid="sources-size"
+        title="Filter by size"
+        aria-label="Filter by size"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="detail-select-btn"
+      >
+        <span>{current.label}</span>
+        <ChevronDownIcon
+          size={14}
+          className={'text-dim transition-transform duration-150 ' + (open ? 'rotate-180' : '')}
+        />
+      </button>
+
+      {open ? (
+        <ul
+          data-testid="sources-size-menu"
+          role="listbox"
+          aria-label="Filter by size"
+          className="absolute left-0 top-full mt-1 min-w-full z-40 bg-[#1c1c1c] border border-edge py-1 shadow-2xl shadow-black/70"
+        >
+          {SIZE_OPTIONS.map((opt) => (
+            <li key={opt.id} role="presentation">
+              <button
+                data-testid="sources-size-option"
+                data-value={opt.id}
+                role="option"
+                aria-selected={opt.id === value}
+                onClick={() => { onChange(opt.id); setOpen(false); }}
+                className={
+                  'w-full flex items-center gap-2 whitespace-nowrap text-left px-3.5 py-2 text-[13px] transition-colors ' +
+                  (opt.id === value
+                    ? 'text-white bg-hover font-semibold'
+                    : 'text-[#d4d4d4] hover:bg-hover/70 hover:text-white')
+                }
+              >
+                {opt.id === value
+                  ? <CheckIcon size={13} className="text-accent shrink-0" />
+                  : <span className="w-[13px] shrink-0" />}
+                {opt.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function SourceRow({ src, onPlay }) {
@@ -187,18 +281,7 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
             className="w-full bg-search border border-edge pl-8 pr-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-[#3d3d3d]"
           />
         </div>
-        <select
-          data-testid="sources-size"
-          title="Filter by size"
-          aria-label="Filter by size"
-          value={sizeFilter}
-          onChange={(e) => setSizeFilter(e.target.value)}
-          className="detail-select"
-        >
-          <option value="all">All sizes</option>
-          <option value="gt1gb">Greater than 1 GB</option>
-          <option value="lt1gb">Less than 1 GB</option>
-        </select>
+        <SizeSelect value={sizeFilter} onChange={setSizeFilter} />
       </div>
 
       <div data-testid="sources-status" className="text-sm text-dim mb-3">

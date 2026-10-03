@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildSeasonTabs, fmtLeft } from '../lib/format.js';
 import {
-  PlayIcon, PlusIcon, CheckIcon, ThumbUpIcon,
+  PlayIcon, PlusIcon, CheckIcon, ThumbUpIcon, EyeIcon, BookmarkIcon,
   ChevronLeftIcon, ChevronRightIcon
 } from './icons.jsx';
 
@@ -88,9 +88,97 @@ function HScroller({ children, testid, scrollerTestid }) {
   );
 }
 
+/* ── Plus button + "add to list" popup (Want to watch / Watched) ─────────
+ * The plus opens a small square popup on top of the screen with the two
+ * list options; the checkmark shows which list(s) the title is already in.
+ * Clicking an option toggles membership (the two lists are exclusive).
+ */
+function ListButton({ membership, onListAction }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const inWatched = membership.watched;
+  const inWant = membership.want;
+  const any = inWatched || inWant;
+
+  // Close on outside mousedown; Esc closes ONLY the popup — the capture
+  // handler swallows the keydown so the app-level Esc chain (details →
+  // back) doesn't also fire.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [open]);
+
+  const options = [
+    { id: 'want', label: 'Want to watch', icon: <BookmarkIcon size={16} />, on: inWant },
+    { id: 'watched', label: 'Watched', icon: <EyeIcon size={16} />, on: inWatched }
+  ];
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        data-testid="details-add-watched"
+        title={any ? 'In your lists' : 'Add to your lists'}
+        aria-label="Add to your lists"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={
+          'h-10 w-10 flex items-center justify-center border transition-colors ' +
+          (inWatched
+            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
+            : inWant
+              ? 'border-accent/50 bg-accent/15 text-accent'
+              : 'bg-white/10 hover:bg-white/20 text-white border-white/10')
+        }
+      >
+        {any ? <CheckIcon size={17} /> : <PlusIcon size={18} />}
+      </button>
+
+      {open ? (
+        <div
+          data-testid="details-list-popup"
+          role="menu"
+          className="absolute left-0 top-full mt-1.5 w-56 z-40 bg-[#161616] border border-white/10 shadow-2xl shadow-black/70 overflow-hidden"
+        >
+          <p className="px-3.5 pt-3 pb-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-muted">
+            Add to
+          </p>
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              data-testid={'list-option-' + opt.id}
+              role="menuitem"
+              onClick={() => { onListAction(opt.id, !opt.on); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[13.5px] text-left text-[#d4d4d4] hover:bg-hover hover:text-white transition-colors"
+            >
+              <span className={opt.on ? 'text-accent' : 'text-dim'}>{opt.icon}</span>
+              <span className="flex-1 font-medium">{opt.label}</span>
+              {opt.on ? <CheckIcon size={15} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /* ── Hero: full-bleed backdrop + tag pills + huge title + meta + play ───── */
 
-function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, resume }) {
+function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, resume }) {
   const isSeries = meta.type === 'series';
   const pct = matchPct(meta.imdbRating);
 
@@ -106,7 +194,7 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
   return (
     <section
       data-testid="details-hero"
-      className="relative w-full overflow-hidden bg-[#0a0a0a]"
+      className="relative w-full bg-[#0a0a0a]"
     >
       {/* Backdrop art */}
       <div className="absolute inset-0 overflow-hidden">
@@ -120,10 +208,14 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
           />
         ) : null}
       </div>
-      {/* Cinematic scrims (to-t / to-r) + red bleed, per the Stitch screens */}
+      {/* Cinematic scrims (to-t / to-r) + red bleed, per the Stitch screens.
+          The bleed blur is clipped by its OWN wrapper — the section itself
+          must NOT clip, or the add-to-list popup would be cut off. */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
       <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/85 to-transparent" />
-      <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 blur-3xl" />
+      </div>
 
       {/* Content */}
       <div className="relative z-10 px-8 pt-14 pb-7 max-w-4xl">
@@ -187,15 +279,17 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
           </p>
         ) : null}
 
-        {/* Actions — kept tight together */}
+        {/* Actions — one row, EXACTLY the same height (h-10 = 40px): the
+            play / trailer buttons previously grew to 42px via py + border
+            while the square plus stayed 40px. Fixed heights everywhere. */}
         <div className="flex flex-wrap items-center gap-2">
           <button
             data-testid="find-sources"
             onClick={onPlayPrimary}
-            className="flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-red-700 text-white font-bold shadow-xl shadow-red-950/40 transition-transform active:scale-95"
+            className="flex items-center gap-2 h-10 px-6 bg-accent hover:bg-red-700 text-white font-bold shadow-xl shadow-red-950/40 transition-transform active:scale-95"
           >
             <PlayIcon size={20} />
-            <span className="text-sm">
+            <span className="text-sm leading-none">
               {resume
                 ? 'Resume ' + resume
                 : isSeries ? 'Play S1:E1' : 'Play Movie'}
@@ -206,26 +300,13 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
               data-testid="details-trailer"
               title="Watch the trailer"
               onClick={() => onPlayTrailer(meta.trailer)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold transition-colors"
+              className="flex items-center gap-2 h-10 px-5 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold transition-colors"
             >
               <PlayIcon size={16} />
-              <span className="text-sm">Trailer</span>
+              <span className="text-sm leading-none">Trailer</span>
             </button>
           ) : null}
-          <button
-            data-testid="details-add-watched"
-            title={inWatched ? 'In your Watched list' : 'Add to Watched list'}
-            aria-label={inWatched ? 'In your Watched list' : 'Add to Watched list'}
-            onClick={onToggleWatched}
-            className={
-              'w-10 h-10 flex items-center justify-center border transition-colors ' +
-              (inWatched
-                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
-                : 'bg-white/10 hover:bg-white/20 text-white border-white/10')
-            }
-          >
-            {inWatched ? <CheckIcon size={17} /> : <PlusIcon size={18} />}
-          </button>
+          <ListButton membership={membership} onListAction={onListAction} />
         </div>
       </div>
     </section>
@@ -405,22 +486,28 @@ function Episodes({ meta, onFindSources }) {
 
 export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
   const isSeries = meta.type === 'series';
-  const [inWatched, setInWatched] = useState(false);
+  const [membership, setMembership] = useState({ watched: false, want: false });
   const [resume, setResume] = useState(null);   // "S2 E5 · 28m left" | "42m left"
   const resumeEpRef = useRef(null);
 
-  // Watched-list state + resume hint (from the Continue watching entry)
+  // List memberships + resume hint (from the Continue watching entry)
   useEffect(() => {
     let alive = true;
     const api = window.fluxAPI;
     if (!api) return undefined;
+    const inList = (list) => (Array.isArray(list) ? list : []).some((w) =>
+      w.imdbId === meta.id && w.type === meta.type);
     if (typeof api.watchedList === 'function') {
       Promise.resolve(api.watchedList())
         .then((list) => {
-          if (alive) {
-            setInWatched((Array.isArray(list) ? list : []).some((w) =>
-              w.imdbId === meta.id && w.type === meta.type));
-          }
+          if (alive) setMembership((m) => ({ ...m, watched: inList(list) }));
+        })
+        .catch(() => {});
+    }
+    if (typeof api.wantList === 'function') {
+      Promise.resolve(api.wantList())
+        .then((list) => {
+          if (alive) setMembership((m) => ({ ...m, want: inList(list) }));
         })
         .catch(() => {});
     }
@@ -446,16 +533,34 @@ export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
     return () => { alive = false; };
   }, [meta, isSeries]);
 
-  const toggleWatched = () => {
+  // Add / remove the title on one of the two lists. Adding to one removes
+  // it from the other (enforced in the main-process library too).
+  const listAction = useCallback((list, add) => {
     const api = window.fluxAPI;
-    if (!api || typeof api.watchedAdd !== 'function') return;
-    if (!inWatched) {
-      Promise.resolve(api.watchedAdd({
-        imdbId: meta.id, type: meta.type, title: meta.name,
-        poster: meta.poster, genres: (meta.genres || []).slice(0, 6)
-      })).then(() => setInWatched(true)).catch(() => {});
+    if (!api) return;
+    const entry = {
+      imdbId: meta.id, type: meta.type, title: meta.name,
+      poster: meta.poster || null
+    };
+    if (list === 'watched') {
+      entry.genres = (meta.genres || []).slice(0, 6);
+      if (add) {
+        if (typeof api.watchedAdd === 'function') {
+          Promise.resolve(api.watchedAdd(entry)).catch(() => {});
+        }
+      } else if (typeof api.watchedRemove === 'function') {
+        Promise.resolve(api.watchedRemove(meta.id)).catch(() => {});
+      }
+    } else if (add) {
+      if (typeof api.wantAdd === 'function') {
+        Promise.resolve(api.wantAdd(entry)).catch(() => {});
+      }
+    } else if (typeof api.wantRemove === 'function') {
+      Promise.resolve(api.wantRemove(meta.id)).catch(() => {});
     }
-  };
+    setMembership(add ? { watched: list === 'watched', want: list === 'want' }
+      : { watched: false, want: false });
+  }, [meta]);
 
   const playPrimary = () => {
     if (resumeEpRef.current) {
@@ -476,8 +581,8 @@ export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
       <Hero
         meta={meta}
         resume={resume}
-        inWatched={inWatched}
-        onToggleWatched={toggleWatched}
+        membership={membership}
+        onListAction={listAction}
         onPlayPrimary={playPrimary}
         onPlayTrailer={onPlayTrailer}
       />

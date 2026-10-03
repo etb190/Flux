@@ -581,11 +581,11 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         closeSubmenu();
       }}
     >
-      {/* top bar */}
+      {/* top bar — doubles as a drag region for the frameless window */}
       <div
         data-testid="player-topbar"
         className={
-          'flex items-center gap-4 px-5 py-3 bg-black/60 backdrop-blur z-10 transition-opacity duration-500 ' +
+          'app-drag flex items-center gap-4 px-5 py-3 bg-black/60 backdrop-blur z-10 transition-opacity duration-500 ' +
           (chromeHidden ? 'opacity-0 pointer-events-none' : 'opacity-100')
         }
       >
@@ -594,12 +594,12 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           title="Return"
           aria-label="Return"
           onClick={onBack}
-          className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
+          className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
         >
           <BackIcon />
           <span>Return</span>
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="app-no-drag flex-1 min-w-0">
           <div data-testid="player-title" className="text-[15px] font-semibold truncate">{titleText}</div>
           <div data-testid="player-sub" className="text-xs text-dim truncate">{subText}</div>
         </div>
@@ -615,7 +615,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
                 }
               } catch (_err) {}
             }}
-            className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
+            className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
           >
             <span>Open on YouTube</span>
           </button>
@@ -624,7 +624,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           data-testid="player-switch"
           title="Pick a different source"
           onClick={onBack}
-          className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
+          className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
         >
           <SwitchIcon />
           <span>Change source</span>

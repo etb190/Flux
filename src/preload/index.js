@@ -36,6 +36,18 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   watchedList: () => ipcRenderer.invoke('flux:watched:list'),
   watchedAdd: (entry) => ipcRenderer.invoke('flux:watched:add', entry),
   watchedRemove: (imdbId) => ipcRenderer.invoke('flux:watched:remove', imdbId),
+  // Want-to-watch list (mutually exclusive with watched)
+  wantList: () => ipcRenderer.invoke('flux:want:list'),
+  wantAdd: (entry) => ipcRenderer.invoke('flux:want:add', entry),
+  wantRemove: (imdbId) => ipcRenderer.invoke('flux:want:remove', imdbId),
+  // Custom frameless window controls (black title bar)
+  winMinimize: () => ipcRenderer.invoke('flux:win:minimize'),
+  winMaximize: () => ipcRenderer.invoke('flux:win:maximize'),
+  winClose: () => ipcRenderer.invoke('flux:win:close'),
+  winIsMaximized: () => ipcRenderer.invoke('flux:win:is-maximized'),
+  onWinState: (callback) => {
+    ipcRenderer.on('flux:win:state', (_event, payload) => callback(payload));
+  },
   // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
   getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
   // Trailers: host-page URL for the YouTube embed (error-153 fix) and the

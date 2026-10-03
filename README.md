@@ -4,54 +4,54 @@ A lightweight streaming app for Windows, built with **Electron + React + Vite** 
 
 Flux uses the same metadata source as [Helix](https://github.com/etb190/Helix) (the Stremio Cinemeta addon) to search movies & series, and a home page filled by the Streaming Availability API (daily Top 10s, popular per service, new & leaving soon) mixed with TMDB trending.
 
-## Status (v0.18.0)
+## Status (v0.19.0)
 
-- [x] ZERO border-radius policy: every box, button, card, pill, input and
-      dropdown across the app is perfectly square (global CSS guarantee)
-- [x] Trailers fixed: YouTube's 2025 anti-anonymous-embed policy (Error 153
-      "Video player configuration error") rejected the old webview path —
-      trailers now play through a browser-native iframe on a localhost host
-      page served by the main process (real origin → referrer YouTube
-      requires), plus an "Open on YouTube" escape hatch; never recorded in
-      Continue watching; Return lands back on the details screen
-- [x] Details page: plain "Series" / "Movie" pill (no more "F Series"),
-      Play / Trailer / Watched buttons pulled close together, info card
-      trimmed to genre + country (cast/director/writer removed), and the
-      oversized spacing between hero → storyline → Episodes → season list
-      → episode cards tightened throughout
-- [x] One black: the details page background no longer splits into two
-      tones (flex-shrink bug let the app background leak below the fold) —
-      the whole page is the hero's #0a0a0a
-- [x] Player chrome: the back button is now a styled "Return" button
-      (was an unstyled "Sources" label), matching the "Change source" button
-- [x] Sources view: size filter dropdown rebuilt — square, exactly the
-      height of the search input beside it, with a chevron affordance
+- [x] REAL Netflix app icon: the official red N ribbon on a black tile
+      (window, taskbar, installer .ico)
+- [x] Custom frameless title bar: the Windows chrome (minimize / maximize /
+      close) is gone — replaced by a black bar with the FLUX wordmark in
+      Netflix red on the left and custom-made square window buttons on the
+      right (close hovers red); the bar is a drag region, double-click
+      maximizes, and the player top bar is draggable too
+- [x] Hero buttons equalized: Play / Trailer / plus all render at exactly
+      40px (the trailer button used to grow to 42px via padding + border)
+- [x] "Want to watch" list: new sidebar tab with its own page (search, add,
+      remove); the plus button in the details hero opens a square popup on
+      top of the screen offering **Want to watch** and **Watched**, with a
+      checkmark on the list(s) the title is already in; the two lists are
+      mutually exclusive (enforced in the main-process library)
+- [x] Size dropdown fully rebuilt as a DOM menu — the native select popup is
+      drawn by Windows and stays rounded no matter what CSS says; the new
+      button + popup are square, the popup shows a check on the active
+      option, outside click / Esc closes it (Esc does not navigate away)
+- [x] Zero border-radius policy (kept): every box, button, card, pill,
+      input, popup and dropdown is perfectly square
+- [x] Text cleanup: the "Home data by..." attribution line under the home
+      rows and the "Keep track of movies &..." paragraph on the Watched
+      page are gone; the sidebar shows only the nav buttons (no "Menu"
+      label) and the FLUX brand lives in the title bar
+- [x] Trailers play through a browser-native YouTube iframe on a localhost
+      host page (Error 153 fix); never recorded in Continue watching;
+      Return lands back on the details screen
+- [x] Details page: plain "Series" / "Movie" pill, info card trimmed to
+      genre + country, tightened spacing, one-black background, season pill
+      buttons + episode cards in scrollable rows with edge arrows
 - [x] Light-black dark mode: neutral gray stack (no blue tint) — #121212 main,
       #0d0d0d sidebar, #1a1a1a cards, red #E50914 accent, Inter font
 - [x] Home page: square-cornered 16:9 backdrop cards with a tiny 3px gap,
-      arrow-paged carousels, square + wide topbar search, tight spacing under
-      the search bar, no hero banner
+      arrow-paged carousels, square + wide topbar search, no hero banner
 - [x] One-layer details flow: back circle, breadcrumb (Movies | Genre | Title)
       and search live INSIDE the content layer; no settings gear anywhere
-- [x] Details hero: full-bleed art, match pill, IMDb chip, red-gradient series
-      title, Play / **Trailer** (YouTube) / add-to-Watched actions — the hero
-      stays above the storyline on every page length
-- [x] Episodes: season buttons in one scrollable line (arrows when they
-      overflow) and episode CARDS in one scrollable line — banner, red
-      "EP n", bold white title, light-gray description, uniform card sizes
 - [x] Sources view: uniform server cards (no "recommended" highlighting),
       format/quality chips, operational badge, Stream Now actions
 - [x] Continue Watching: first row, S/E + time-left badge, red progress bar,
       same-source resume from the saved timestamp, hover x dismiss (persisted)
 - [x] Player: **Artplayer** engine + hls.js — CC (subtitles) and fullscreen
       buttons sized like the built-ins and pinned at the FAR RIGHT of the
-      control bar; CC opens the Flux subtitle menu (real mouse clicks included)
-- [x] CSP fix: inline styles + Artplayer's runtime stylesheet now apply
-      (previously blocked — subtitle size/background settings were no-ops)
-- [x] Helix subtitle system kept (SRT/VTT/ASS, embedded tracks) + subtitle
-      settings (size, background, delay) in the player settings panel
+      control bar; subtitle settings (size, background, delay) work
+- [x] Helix subtitle system kept (SRT/VTT/ASS, embedded tracks)
 - [x] cursor:pointer on every clickable element
-- [x] Sidebar Home/Watched jump straight to their views from anywhere
+- [x] Sidebar Home/Watched/Want-to-watch jump straight to their views
 - [x] Search (debounced), multi-provider source scanning, Squirrel.Windows
       installer lifecycle
 
@@ -70,6 +70,8 @@ Flux/
 │   │   ├── home.js              # home orchestrator (SA + TMDB)
 │   │   ├── saa.js               # Streaming Availability API client
 │   │   ├── tmdbhome.js          # TMDB trending + IMDb enrichment
+│   │   ├── trailerserver.js     # localhost host page for YouTube trailers
+│   │   ├── library.js           # history + watched + want-to-watch store
 │   │   └── settings.js          # persisted settings (v3)
 │   ├── preload/index.js         # contextBridge fluxAPI
 │   └── renderer/                # React app (Vite + Tailwind v4)
@@ -78,13 +80,15 @@ Flux/
 │       └── src/
 │           ├── main.jsx         # entry + error boundary
 │           ├── App.jsx          # view machine, Esc chain, orchestration
-│           ├── components/      # TopBar, DetailTopBar, HomeView, ResultsView,
-│           │                    # DetailsView, SourcesView, PlayerView
-│           │                    # (Artplayer), SubtitleMenu, SettingsModal,
-│           │                    # PosterCard, icons, ui
+│           ├── components/      # TitleBar (frameless chrome), SideBar, TopBar,
+│           │                    # DetailTopBar, HomeView, ResultsView,
+│           │                    # DetailsView, SourcesView, WatchedView
+│           │                    # (Watched + Want to watch), PlayerView
+│           │                    # (Artplayer), SubtitleMenu, PosterCard,
+│           │                    # icons, ui
 │           ├── hooks/           # useHome, useSearch, useStreams, useSubtitles
 │           └── lib/             # subsParser, format helpers, cinemeta fallback
-└── assets/icon.png              # installer/window icon
+└── assets/                      # icon.png + icon.ico (Netflix N)
 ```
 
 The main process modules are plain CommonJS and are copied to `out/main/` at

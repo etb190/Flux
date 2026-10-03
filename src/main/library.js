@@ -19,6 +19,10 @@
 //              home page. Entry: { imdbId, type, title, poster, genres,
 //                       addedAt }
 //
+//   want     — the "Want to watch" list (same entry shape, no genres).
+//              Mutually exclusive with watched: adding a title to one
+//              removes it from the other (a title can't be both).
+//
 // Pure Node module (no electron import): main.js passes the file path, so
 // it stays unit-testable from plain Node.
 
@@ -104,9 +108,10 @@ function loadLibrary(file) {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
     const history = Array.isArray(parsed.history) ? parsed.history : [];
     const watched = Array.isArray(parsed.watched) ? parsed.watched : [];
-    return { history, watched };
+    const want = Array.isArray(parsed.want) ? parsed.want : [];
+    return { history, watched, want };
   } catch (_) {
-    return { history: [], watched: [] };
+    return { history: [], watched: [], want: [] };
   }
 }
 
@@ -201,6 +206,8 @@ function addWatched(file, raw) {
       : [],
     addedAt: Date.now()
   });
+  // Watched and Want-to-watch are mutually exclusive
+  lib.want = lib.want.filter((w) => w.imdbId !== entry.imdbId);
   saveLibrary(file, lib);
   return listWatched(file);
 }
@@ -215,9 +222,44 @@ function removeWatched(file, imdbId) {
   return { removed, watched: lib.watched };
 }
 
+// ── Want-to-watch list (mutually exclusive with watched) ──────────────
+
+function listWant(file) {
+  return loadLibrary(file).want;
+}
+
+function addWant(file, raw) {
+  const entry = normalizeEntry(raw);
+  if (!entry) throw new Error('Invalid want entry.');
+
+  const lib = loadLibrary(file);
+  if (lib.want.some(
+    (w) => w.imdbId === entry.imdbId && w.type === entry.type
+  )) {
+    return listWant(file);              // already added — no duplicate
+  }
+
+  lib.want.unshift({ ...entry, addedAt: Date.now() });
+  // Watched and Want-to-watch are mutually exclusive
+  lib.watched = lib.watched.filter((w) => w.imdbId !== entry.imdbId);
+  saveLibrary(file, lib);
+  return listWant(file);
+}
+
+function removeWant(file, imdbId) {
+  const id = String(imdbId || '').trim();
+  const lib = loadLibrary(file);
+  const before = lib.want.length;
+  lib.want = lib.want.filter((w) => w.imdbId !== id);
+  const removed = lib.want.length !== before;
+  if (removed) saveLibrary(file, lib);
+  return { removed, want: lib.want };
+}
+
 module.exports = {
   HISTORY_CAP,
   loadLibrary, saveLibrary,
   listHistory, addHistory, removeHistory, updateHistoryProgress,
-  listWatched, addWatched, removeWatched
+  listWatched, addWatched, removeWatched,
+  listWant, addWant, removeWant
 };

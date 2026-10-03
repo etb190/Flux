@@ -329,30 +329,29 @@ body {
   background: rgba(34, 34, 34, 0.9);
   color: #d4d4d4;
 }
-/* Size filter — square, EXACTLY the height of the search input beside it
-   (text-sm + py-2 + 2px border = 38px), with a chevron affordance */
-.detail-select {
-  -webkit-appearance: none;
-  appearance: none;
+/* Size filter — custom dropdown BUTTON (square, EXACTLY the height of the
+   search input beside it: text-sm + py-2 + 2px border = 38px). The popup
+   list is DOM-rendered in SourcesView, so the zero-radius rule covers it —
+   the native select popup was drawn by Windows and stayed rounded. */
+.detail-select-btn {
   box-sizing: border-box;
   height: 38px;
-  background: #1c1c1c
-    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239b9b9b' stroke-width='1.5'/%3E%3C/svg%3E")
-    no-repeat right 12px center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #1c1c1c;
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  padding: 0 34px 0 14px;
+  padding: 0 12px 0 14px;
   border: 1px solid var(--color-edge);
   cursor: pointer;
   outline: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
 }
-.detail-select:hover {
-  background-color: #242424;
-}
-.detail-select option {
-  background: #1c1c1c;
-  color: #fff;
+.detail-select-btn:hover {
+  background: #242424;
 }
 
 /* ── Details horizontal scrollers (season pills + episode cards) ────────── */

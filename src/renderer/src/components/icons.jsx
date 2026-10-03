@@ -200,3 +200,47 @@ export function FilmIcon({ size = 28 }) {
     </svg>
   );
 }
+
+/* Want-to-watch (bookmark ribbon) */
+export function BookmarkIcon({ size = 19 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path fill="currentColor" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15-5-2.18L7 18V5h10v13z" />
+    </svg>
+  );
+}
+
+/* ── Custom window controls (frameless title bar, Netflix-dark chrome) ── */
+
+export function WinMinimizeIcon({ size = 14 }) {
+  return (
+    <svg viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
+      <path stroke="currentColor" strokeWidth="1.2" d="M1.5 6h9" />
+    </svg>
+  );
+}
+
+export function WinMaximizeIcon({ size = 14 }) {
+  return (
+    <svg viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
+      <rect x="1.8" y="1.8" width="8.4" height="8.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+export function WinRestoreIcon({ size = 14 }) {
+  return (
+    <svg viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
+      <rect x="1.8" y="3.8" width="6.4" height="6.4" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path fill="none" stroke="currentColor" strokeWidth="1.2" d="M4 1.8h6.2v6.2" />
+    </svg>
+  );
+}
+
+export function WinCloseIcon({ size = 14 }) {
+  return (
+    <svg viewBox="0 0 12 12" width={size} height={size} aria-hidden="true">
+      <path stroke="currentColor" strokeWidth="1.2" d="m1.8 1.8 8.4 8.4M10.2 1.8 1.8 10.2" />
+    </svg>
+  );
+}

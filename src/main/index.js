@@ -33,17 +33,22 @@ const libraryFile = () => path.join(app.getPath('userData'), 'flux-library.json'
   }
 })();
 
+let mainWin = null;
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 940,
     minHeight: 600,
-    backgroundColor: '#0b0e14',
+    backgroundColor: '#0d0d0d',
     autoHideMenuBar: true,
     show: false,
     title: 'Flux',
-    icon: path.join(app.getAppPath(), 'assets', 'icon.png'),
+    // Frameless: the OS title bar is replaced by the renderer's custom
+    // black TitleBar (FLUX wordmark + min/max/close buttons).
+    frame: false,
+    icon: path.join(app.getAppPath(), 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -52,8 +57,18 @@ function createWindow() {
       webviewTag: true          // embed-player sources (vidsrc, vidlink, ...)
     }
   });
+  mainWin = win;
 
   win.once('ready-to-show', () => win.show());
+
+  // Push window state to the custom title bar (maximize/restore glyph)
+  const sendWinState = () => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('flux:win:state', { maximized: win.isMaximized() });
+    }
+  };
+  win.on('maximize', sendWinState);
+  win.on('unmaximize', sendWinState);
 
   // Vite dev server (HMR) in development, built output in production.
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
@@ -234,6 +249,17 @@ ipcMain.handle('flux:open-external', (_e, url) => {
   return false;
 });
 
+// ── IPC: custom window controls (frameless title bar) ────────────────────
+ipcMain.handle('flux:win:minimize', () => { if (mainWin) mainWin.minimize(); return true; });
+ipcMain.handle('flux:win:maximize', () => {
+  if (!mainWin) return false;
+  if (mainWin.isMaximized()) mainWin.unmaximize();
+  else mainWin.maximize();
+  return mainWin.isMaximized();
+});
+ipcMain.handle('flux:win:close', () => { if (mainWin) mainWin.close(); return true; });
+ipcMain.handle('flux:win:is-maximized', () => (mainWin ? mainWin.isMaximized() : false));
+
 // ── IPC: app settings (graphics backend etc.) ────────────────────────────
 ipcMain.handle('flux:settings:get', () => ({
   ...loadSettings(settingsFile()),
@@ -277,6 +303,15 @@ ipcMain.handle('flux:watched:add', (_e, entry) => {
 });
 ipcMain.handle('flux:watched:remove', (_e, imdbId) =>
   library.removeWatched(libraryFile(), imdbId));
+
+// ── IPC: want-to-watch list (mutually exclusive with watched) ──────────
+ipcMain.handle('flux:want:list', () => library.listWant(libraryFile()));
+ipcMain.handle('flux:want:add', (_e, entry) => {
+  try { return { want: library.addWant(libraryFile(), entry) }; }
+  catch (e) { return { error: (e && e.message) || 'Failed to add.' }; }
+});
+ipcMain.handle('flux:want:remove', (_e, imdbId) =>
+  library.removeWant(libraryFile(), imdbId));
 
 // ── IPC: TMDB suggestion rows for the watched list ───────────────────────
 ipcMain.handle('flux:suggestions', async () => {

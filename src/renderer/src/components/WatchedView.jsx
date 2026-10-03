@@ -1,7 +1,9 @@
-/* ── Watched tab (sidebar): curate the list that drives the suggestions ────
- * Search a title (Cinemeta, same source as the topbar search), add it to
- * the watched list, remove entries from the grid. The home feed builds
- * "Because you watched …" rows from this list via TMDB recommendations.
+/* ── Library tab (sidebar): Watched + Want to watch ────────────────────────
+ * One view serves both lists: search a title (Cinemeta, same source as the
+ * topbar search), add it, remove entries from the grid. The "watched" list
+ * drives the TMDB suggestion rows on the home page ("Because you watched").
+ * The "want" list is the Want-to-watch backlog (mutually exclusive with
+ * watched — handled in the main-process library).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -47,27 +49,30 @@ function WatchedHit({ item, added, onAdd }) {
   );
 }
 
-export default function WatchedView({ onOpen }) {
+export default function WatchedView({ list = 'watched', onOpen }) {
+  const isWant = list === 'want';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
-  const [watched, setWatched] = useState([]);
+  const [items, setItems] = useState([]);
   const seqRef = useRef(0);
   const debounceRef = useRef(null);
   const queryRef = useRef('');
 
-  const refreshWatched = useCallback(() => {
+  const refreshList = useCallback(() => {
     const api = window.fluxAPI;
-    if (!api || typeof api.watchedList !== 'function') return;
-    Promise.resolve(api.watchedList())
-      .then((items) => setWatched(Array.isArray(items) ? items : []))
+    if (!api) return;
+    const fetcher = isWant ? api.wantList : api.watchedList;
+    if (typeof fetcher !== 'function') return;
+    Promise.resolve(fetcher())
+      .then((rows) => setItems(Array.isArray(rows) ? rows : []))
       .catch(() => {});
-  }, []);
+  }, [isWant]);
 
-  useEffect(() => { refreshWatched(); }, [refreshWatched]);
+  useEffect(() => { refreshList(); }, [refreshList]);
 
   const isAdded = useCallback(
-    (item) => watched.some((w) => w.imdbId === item.id && w.type === item.type),
-    [watched]
+    (item) => items.some((w) => w.imdbId === item.id && w.type === item.type),
+    [items]
   );
 
   const runSearch = useCallback(async (q) => {
@@ -75,11 +80,11 @@ export default function WatchedView({ onOpen }) {
     const seq = ++seqRef.current;
     try {
       const api = window.fluxAPI;
-      const items = api && typeof api.search === 'function'
+      const rows = api && typeof api.search === 'function'
         ? await api.search(q)
         : [];
       if (seq !== seqRef.current) return;
-      setResults(Array.isArray(items) ? items.slice(0, 12) : []);
+      setResults(Array.isArray(rows) ? rows.slice(0, 12) : []);
     } catch (_err) {
       if (seq === seqRef.current) setResults([]);
     }
@@ -101,39 +106,44 @@ export default function WatchedView({ onOpen }) {
 
   const add = useCallback(async (item) => {
     const api = window.fluxAPI;
-    if (!api || typeof api.watchedAdd !== 'function') return;
+    if (!api) return;
+    const adder = isWant ? api.wantAdd : api.watchedAdd;
+    if (typeof adder !== 'function') return;
     try {
-      const res = await api.watchedAdd({
+      const payload = {
         imdbId: item.id,
         type: item.type,
         title: item.name,
-        poster: item.poster || null,
-        genres: Array.isArray(item.genres) ? item.genres : []
-      });
-      if (res && res.watched) setWatched(res.watched);
+        poster: item.poster || null
+      };
+      if (!isWant) payload.genres = Array.isArray(item.genres) ? item.genres : [];
+      const res = await adder(payload);
+      const fresh = res && (isWant ? res.want : res.watched);
+      if (fresh) setItems(fresh);
+      else refreshList();
     } catch (_err) { /* leave the row as-is on failure */ }
-  }, []);
+  }, [isWant, refreshList]);
 
   const remove = useCallback(async (entry) => {
     const api = window.fluxAPI;
-    if (!api || typeof api.watchedRemove !== 'function') return;
+    if (!api) return;
+    const remover = isWant ? api.wantRemove : api.watchedRemove;
+    if (typeof remover !== 'function') return;
     try {
-      const res = await api.watchedRemove(entry.imdbId);
-      if (res && res.watched) setWatched(res.watched);
-      else setWatched((list) => list.filter((w) => w.imdbId !== entry.imdbId));
+      const res = await remover(entry.imdbId);
+      const fresh = res && (isWant ? res.want : res.watched);
+      if (fresh) setItems(fresh);
+      else setItems((rows) => rows.filter((w) => w.imdbId !== entry.imdbId));
     } catch (_err) { /* ignore */ }
-  }, []);
+  }, [isWant]);
 
   return (
     <div data-testid="watched-view" className="max-w-[1060px]">
-      <h2 className="text-[22px] font-extrabold mt-1">Watched</h2>
-      <p className="mt-1.5 mb-5 text-[13.5px] leading-relaxed text-dim max-w-xl">
-        Keep track of movies &amp; shows you&rsquo;ve already seen. Flux uses
-        this list to recommend similar titles on the Home page &mdash; TV
-        shows included.
-      </p>
+      <h2 className="text-[22px] font-extrabold mt-1">
+        {isWant ? 'Want to Watch' : 'Watched'}
+      </h2>
 
-      <div className="relative max-w-md">
+      <div className="relative max-w-md mt-4">
         <SearchIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
         <input
           data-testid="watched-search"
@@ -165,15 +175,15 @@ export default function WatchedView({ onOpen }) {
 
       <div className="flex items-baseline gap-2.5 mt-7 mb-3">
         <h3 className="text-[15.5px] font-bold">Your list</h3>
-        {watched.length ? (
+        {items.length ? (
           <span className="text-[12.5px] text-muted">
-            {watched.length} {watched.length === 1 ? 'title' : 'titles'}
+            {items.length} {items.length === 1 ? 'title' : 'titles'}
           </span>
         ) : null}
       </div>
-      {watched.length ? (
+      {items.length ? (
         <div data-testid="watched-grid" className="grid grid-cols-[repeat(auto-fill,138px)] gap-4 pb-6">
-          {watched.map((entry) => (
+          {items.map((entry) => (
             <div key={entry.imdbId + entry.type} className="w-[138px]">
               <div className="relative group">
                 <PosterCard
@@ -185,8 +195,8 @@ export default function WatchedView({ onOpen }) {
                 />
                 <button
                   data-testid="watched-remove"
-                  title="Remove from Watched"
-                  aria-label="Remove from Watched"
+                  title={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
+                  aria-label={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
                   onClick={(e) => { e.stopPropagation(); remove(entry); }}
                   className="card-x z-10"
                 >
@@ -200,7 +210,9 @@ export default function WatchedView({ onOpen }) {
         <div data-testid="watched-empty" className=" border border-dashed border-edge bg-raised px-5 py-8 text-center">
           <h4 className="text-[15px] font-semibold mb-1.5">Nothing here yet</h4>
           <p className="text-[13px] text-dim m-0">
-            Search above and add what you&rsquo;ve watched to unlock recommendations.
+            {isWant
+              ? 'Search above and add what you want to watch later.'
+              : 'Search above and add what you\u2019ve watched to unlock recommendations.'}
           </p>
         </div>
       )}

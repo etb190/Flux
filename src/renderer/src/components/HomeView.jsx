@@ -366,11 +366,6 @@ function HomeBody({ data, onOpen, active, onResume }) {
           </CarouselRow>
         ) : null
       )}
-      <p className="py-6 text-[11px] leading-relaxed text-muted/80">
-        Home data by the Streaming Availability API (Movie of the Night) &middot;
-        Trending &amp; suggestions by TMDB. This product uses the TMDB API but
-        is not endorsed or certified by TMDB.
-      </p>
     </div>
   );
 }

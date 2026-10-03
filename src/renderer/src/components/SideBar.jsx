@@ -1,10 +1,12 @@
-/* ── Sidebar (Stitch design): brand, MENU, version footer ──────────────────
- * Persistent left rail visible on every view (home, watched, results,
- * details). Home + Watched are the only two destinations.
+/* ── Sidebar (Stitch design): nav buttons + version footer ─────────────────
+ * Persistent left rail visible on every view (home, watched, want, results,
+ * details). Home / Watched / Want to watch are the only destinations.
+ * The FLUX brand lives in the custom title bar, so the rail is buttons only
+ * (no "Menu" label — user request).
  */
 
 import { useEffect, useState } from 'react';
-import { HomeIcon, EyeIcon } from './icons.jsx';
+import { HomeIcon, EyeIcon, BookmarkIcon } from './icons.jsx';
 
 export default function SideBar({ active, onTab }) {
   const [version, setVersion] = useState('');
@@ -39,20 +41,10 @@ export default function SideBar({ active, onTab }) {
       className="w-[196px] shrink-0 flex flex-col justify-between bg-rail border-r border-white/[0.04] z-20"
     >
       <div className="px-4 pt-5 overflow-y-auto scroll-dark">
-        <div
-          data-testid="sidebar-brand"
-          className="mb-7 px-2 text-[19px] font-black uppercase tracking-[0.14em] text-accent select-none"
-          style={{ textShadow: '0 0 18px rgba(229, 9, 20, 0.35)' }}
-        >
-          Flux
-        </div>
-
-        <p className="mb-2.5 px-2 text-[10.5px] font-bold uppercase tracking-[0.12em] text-muted">
-          Menu
-        </p>
         <nav className="flex flex-col gap-1">
           {item('feed', 'Home', <HomeIcon size={16} />)}
           {item('watched', 'Watched', <EyeIcon size={16} />)}
+          {item('want', 'Want to watch', <BookmarkIcon size={16} />)}
         </nav>
       </div>
 
