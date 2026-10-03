@@ -1,18 +1,49 @@
 @import "tailwindcss";
 
-/* ── Flux theme (same palette the vanilla UI used) ─────────────────────── */
+/* ── Flux theme — Stitch design system ───────────────────────────────────
+   Palette ported from the Stitch "Netflix Dashboard Homepage" generation:
+   Inter font, dark navy stack, red accent, 16:9 backdrop cards with
+   uppercase title overlays, persistent left sidebar, topbar search. */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("./fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("./fonts/inter-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @theme {
-  --color-bg: #0b0e14;
-  --color-raised: #12161f;
-  --color-hover: #1a2029;
-  --color-edge: #232a36;
-  --color-ink: #e8ecf3;
-  --color-dim: #8b94a7;
-  --color-accent: #5b8cff;
-  --color-movie: #3f7dff;
-  --color-series: #b45bff;
-  --color-gold: #f5c518;
-  --font-sans: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, sans-serif;
+  /* Stitch tokens (semantic names kept from the vanilla UI) */
+  --color-bg: #141824;        /* main content background */
+  --color-rail: #11141e;      /* sidebar background */
+  --color-raised: #1a1f2e;    /* panels / cards / rows */
+  --color-inner: #1f2638;     /* card placeholder inner */
+  --color-search: #1b2030;    /* search + input fields */
+  --color-hover: #232a3d;     /* hover surfaces */
+  --color-edge: #232a3d;      /* borders */
+  --color-ink: #f0f3f9;       /* primary text */
+  --color-dim: #8b94a9;       /* secondary text */
+  --color-muted: #677189;     /* faint text / hints */
+  --color-accent: #e50914;    /* Flux red (Stitch netflixRed) */
+  --color-gold: #f5c518;      /* rating */
+  --color-movie: #677189;     /* type badge (neutral slate in Stitch style) */
+  --color-series: #c3cad9;    /* type badge */
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
 html,
@@ -26,6 +57,7 @@ body {
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-ink);
+  user-select: none;
 }
 
 /* Frameless-window drag regions (topbar) */
@@ -36,21 +68,21 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Dark scrollbars (main content + horizontal card rows) */
+/* Dark scrollbars (Stitch spec: 6px, thumb #252b3d) */
 .scroll-dark {
   scrollbar-width: thin;
-  scrollbar-color: #2a3342 transparent;
+  scrollbar-color: #252b3d transparent;
 }
 .scroll-dark::-webkit-scrollbar {
-  width: 10px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 .scroll-dark::-webkit-scrollbar-thumb {
-  background: #2a3342;
-  border-radius: 8px;
+  background: #252b3d;
+  border-radius: 4px;
 }
 .scroll-dark::-webkit-scrollbar-thumb:hover {
-  background: #39455a;
+  background: #363e56;
 }
 .scroll-dark::-webkit-scrollbar-track {
   background: transparent;
@@ -75,15 +107,15 @@ body {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #5b8cff;
+  background: var(--color-accent);
   border: none;
-  box-shadow: 0 0 6px rgba(91, 140, 255, 0.6);
+  box-shadow: 0 0 6px rgba(229, 9, 20, 0.55);
 }
 .seek::-moz-range-thumb {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #5b8cff;
+  background: var(--color-accent);
   border: none;
 }
 
@@ -97,10 +129,10 @@ body {
   }
 }
 .skeleton {
-  background: linear-gradient(90deg, #141a24 25%, #1c2432 50%, #141a24 75%);
+  background: linear-gradient(90deg, #1a1f2e 25%, #232b40 50%, #1a1f2e 75%);
   background-size: 800px 100%;
   animation: flux-shimmer 1.4s infinite linear;
-  border-radius: 12px;
+  border-radius: 6px;
 }
 
 /* Netflix-style Top 10 rank badge */
@@ -108,13 +140,13 @@ body {
   position: absolute;
   top: 6px;
   left: 6px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   font-style: italic;
   color: #fff;
-  background: rgba(229, 9, 20, 0.92);
+  background: rgba(229, 9, 20, 0.94);
   padding: 0 7px;
-  border-radius: 6px;
+  border-radius: 5px;
   line-height: 22px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
@@ -138,8 +170,8 @@ body {
 .spinner {
   width: 42px;
   height: 42px;
-  border: 4px solid rgba(91, 140, 255, 0.2);
-  border-top-color: #5b8cff;
+  border: 4px solid rgba(229, 9, 20, 0.18);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: flux-spin 0.9s linear infinite;
 }
@@ -152,19 +184,53 @@ body {
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #5b8cff;
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: flux-spin 0.8s linear infinite;
 }
 
-/* Hero bottom shade (home + details) */
+/* Hero bottom shade (details view) */
 .hero-shade {
   background: linear-gradient(
     180deg,
-    rgba(11, 14, 20, 0) 0%,
-    rgba(11, 14, 20, 0.55) 55%,
-    rgba(11, 14, 20, 0.96) 100%
+    rgba(17, 20, 30, 0) 0%,
+    rgba(17, 20, 30, 0.55) 55%,
+    rgba(17, 20, 30, 0.96) 100%
   );
+}
+
+/* ── Backdrop cards (Stitch): 16:9 art + bottom gradient + uppercase title */
+.backdrop-shade {
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.82) 0%,
+    rgba(0, 0, 0, 0.12) 46%,
+    transparent 70%
+  );
+}
+.backdrop-label {
+  position: absolute;
+  left: 10px;
+  right: 44px;
+  bottom: 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+.backdrop-year {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.62);
 }
 
 /* ── Home carousel rows: arrows replace the horizontal scrollbar ───────── */
@@ -185,64 +251,70 @@ body {
   color: var(--color-dim);
   background: var(--color-raised);
   border: 1px solid var(--color-edge);
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .row-arrow:hover:not(:disabled) {
   color: #fff;
-  border-color: var(--color-accent);
-  background: rgba(91, 140, 255, 0.16);
+  border-color: #323a52;
+  background: var(--color-hover);
 }
 .row-arrow:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   pointer-events: none;
 }
 
-/* Continue-watching card: S/E badge + remove button */
+/* Continue-watching card: S/E badge (top-left) + remove button (top-right,
+   revealed on hover — the x removes that card, not the concept) */
 .cw-badge {
   position: absolute;
+  top: 8px;
   left: 8px;
-  bottom: 8px;
   max-width: calc(100% - 16px);
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 3px 7px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.06em;
   color: #fff;
-  background: rgba(9, 12, 18, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 7px;
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.68);
+  border-radius: 4px;
+  backdrop-filter: blur(3px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .card-x {
   position: absolute;
-  top: 7px;
-  left: 7px;
-  width: 22px;
-  height: 22px;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #cfd6e0;
-  background: rgba(9, 12, 18, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
+  color: #d7dbe6;
+  background: rgba(0, 0, 0, 0.68);
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  backdrop-filter: blur(3px);
   padding: 0;
+}
+.group:hover .card-x {
+  opacity: 1;
+  transform: scale(1);
 }
 .card-x:hover {
   color: #fff;
-  background: #e5484d;
-  border-color: #e5484d;
-  opacity: 1;
+  background: var(--color-accent);
 }
 
-/* Watched tab: search result rows */
+/* Watched page: search result rows */
 .watched-hit + .watched-hit {
   border-top: 1px solid var(--color-edge);
 }

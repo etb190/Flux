@@ -7,7 +7,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import TopBar from './components/TopBar.jsx';
+import SideBar from './components/SideBar.jsx';
 import HomeView from './components/HomeView.jsx';
+import WatchedView from './components/WatchedView.jsx';
 import ResultsView from './components/ResultsView.jsx';
 import DetailsView from './components/DetailsView.jsx';
 import SourcesView from './components/SourcesView.jsx';
@@ -259,82 +261,88 @@ export default function App() {
     view === 'details' || view === 'sources';
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-bg text-ink font-sans">
-      <TopBar
-        query={query}
-        onQueryChange={handleQueryChange}
-        onEnter={handleQueryEnter}
-        onClear={handleQueryClear}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+    <div className="flex h-screen overflow-hidden bg-bg text-ink font-sans">
+      <SideBar active={homeTab} onTab={setHomeTab} />
 
-      <main ref={contentRef} className="flex-1 overflow-y-auto scroll-dark relative">
-        {view === 'home' ? (
-          <HomeView
-            home={home}
-            onOpen={(item) => openDetails(item, 'home')}
-            onOpenSettings={() => setSettingsOpen(true)}
-            tab={homeTab}
-            onTab={setHomeTab}
-          />
-        ) : null}
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopBar
+          query={query}
+          onQueryChange={handleQueryChange}
+          onEnter={handleQueryEnter}
+          onClear={handleQueryClear}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
 
-        {view === 'loading' ? <LoadingPane label={'Searching\u2026'} testid="loading" /> : null}
-
-        {view === 'error' ? (
-          <ErrorPane
-            title="Something went wrong"
-            message={search.errorMsg || 'Couldn\u2019t reach the search service. Check your connection and try again.'}
-            testid="error"
-          />
-        ) : null}
-
-        {view === 'empty' ? <EmptyPane /> : null}
-
-        {view === 'results' ? (
-          <ResultsView query={query} items={search.items} onOpen={openDetails} />
-        ) : null}
-
-        {inDetailsFlow ? (
-          <section data-testid="details">
-            <div className="px-8 pt-4 pb-2">
-              <button
-                data-testid="back-btn"
-                title="Back"
-                aria-label="Back"
-                onClick={() => {
-                  if (view === 'sources') closeSources();
-                  else closeDetails();
-                }}
-                className="flex items-center gap-1.5 text-dim hover:text-ink"
-              >
-                <BackIcon />
-                <span className="text-sm font-medium">Back</span>
-              </button>
-            </div>
-
-            {view === 'details-loading' ? (
-              <LoadingPane label={'Loading details\u2026'} testid="details-loading" />
-            ) : null}
-
-            {view === 'details-error' ? (
-              <ErrorPane
-                title="Couldn't load details"
-                message="Try going back and opening it again."
-                testid="details-error"
+        <main ref={contentRef} className="flex-1 overflow-y-auto scroll-dark relative px-8 pt-4 pb-2">
+          {view === 'home' ? (
+            homeTab === 'watched' ? (
+              <WatchedView onOpen={(item) => openDetails(item, 'home')} />
+            ) : (
+              <HomeView
+                home={home}
+                onOpen={(item) => openDetails(item, 'home')}
+                onOpenSettings={() => setSettingsOpen(true)}
               />
-            ) : null}
+            )
+          ) : null}
 
-            {view === 'details' && meta ? (
-              <DetailsView meta={meta} onFindSources={openSources} />
-            ) : null}
+          {view === 'loading' ? <LoadingPane label={'Searching\u2026'} testid="loading" /> : null}
 
-            {view === 'sources' && meta && episode ? (
-              <SourcesView meta={meta} episode={episode} scan={streams} onPlay={openPlayer} />
-            ) : null}
-          </section>
-        ) : null}
-      </main>
+          {view === 'error' ? (
+            <ErrorPane
+              title="Something went wrong"
+              message={search.errorMsg || 'Couldn\u2019t reach the search service. Check your connection and try again.'}
+              testid="error"
+            />
+          ) : null}
+
+          {view === 'empty' ? <EmptyPane /> : null}
+
+          {view === 'results' ? (
+            <ResultsView query={query} items={search.items} onOpen={openDetails} />
+          ) : null}
+
+          {inDetailsFlow ? (
+            <section data-testid="details">
+              <div className="pt-1 pb-2">
+                <button
+                  data-testid="back-btn"
+                  title="Back"
+                  aria-label="Back"
+                  onClick={() => {
+                    if (view === 'sources') closeSources();
+                    else closeDetails();
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-raised border border-edge px-3 py-1.5 text-dim hover:text-ink hover:border-[#323a52] transition-colors"
+                >
+                  <BackIcon />
+                  <span className="text-[13.5px] font-medium">Back</span>
+                </button>
+              </div>
+
+              {view === 'details-loading' ? (
+                <LoadingPane label={'Loading details\u2026'} testid="details-loading" />
+              ) : null}
+
+              {view === 'details-error' ? (
+                <ErrorPane
+                  title="Couldn't load details"
+                  message="Try going back and opening it again."
+                  testid="details-error"
+                />
+              ) : null}
+
+              {view === 'details' && meta ? (
+                <DetailsView meta={meta} onFindSources={openSources} />
+              ) : null}
+
+              {view === 'sources' && meta && episode ? (
+                <SourcesView meta={meta} episode={episode} scan={streams} onPlay={openPlayer} />
+              ) : null}
+            </section>
+          ) : null}
+        </main>
+      </div>
 
       <SettingsModal
         open={settingsOpen}

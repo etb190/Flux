@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Flux - streaming app (Electron + React + Vite)",
   "main": "./out/main/index.js",
   "author": "etb190",
@@ -43,7 +43,9 @@
       "target": [
         {
           "target": "squirrel",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.png"

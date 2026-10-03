@@ -35,5 +35,6 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   watchedRemove: (imdbId) => ipcRenderer.invoke('flux:watched:remove', imdbId),
   // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
   getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
+  appVersion: () => ipcRenderer.invoke('flux:app:version'),
   tmdbToImdb: (tmdbId, type) => ipcRenderer.invoke('flux:tmdb:imdb', tmdbId, type)
 });

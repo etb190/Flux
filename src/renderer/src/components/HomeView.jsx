@@ -1,5 +1,5 @@
-/* ── Home page: left sidebar (Home / Watched) + rows ──────────────────────
- * Rows (feed tab, top → bottom):
+/* ── Home feed: rows of Stitch backdrop cards ─────────────────────────────
+ * Rows (top → bottom):
  *   1. "Continue watching"        — local watch history (S/E badge + X)
  *   2. "Because you watched …"    — TMDB recommendations from the Watched list
  *   3. API rows                   — SA top 10s / popular / new + TMDB trending
@@ -7,40 +7,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import PosterCard from './PosterCard.jsx';
-import WatchedView from './WatchedView.jsx';
+import PosterCard, { BackdropCard } from './PosterCard.jsx';
 import {
-  ChevronLeftIcon, ChevronRightIcon, CloseIcon, EyeIcon, HomeIcon
+  ChevronLeftIcon, ChevronRightIcon, CloseIcon
 } from './icons.jsx';
-
-// ── Sidebar ───────────────────────────────────────────────────────────────
-
-function Sidebar({ tab, onTab }) {
-  const btn = (id, label, icon) => (
-    <button
-      data-testid={'side-' + id}
-      onClick={() => onTab(id)}
-      className={
-        'flex items-center gap-2.5 rounded-[9px] px-3.5 py-2.5 text-[13.5px] font-bold text-left transition-colors ' +
-        (tab === id
-          ? 'bg-accent text-white shadow-[0_0_12px_rgba(91,140,255,0.35)]'
-          : 'text-dim hover:text-ink hover:bg-white/5')
-      }
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-  return (
-    <aside
-      data-testid="home-sidebar"
-      className="w-[172px] shrink-0 flex flex-col gap-1 px-3 py-5 bg-raised border-r border-edge self-stretch"
-    >
-      {btn('feed', 'Home', <HomeIcon />)}
-      {btn('watched', 'Watched', <EyeIcon />)}
-    </aside>
-  );
-}
 
 // ── Carousel row with arrow buttons (no scrollbar) ───────────────────────
 
@@ -53,7 +23,7 @@ function ArrowBtn({ dir, disabled, onClick }) {
       onClick={onClick}
       className="row-arrow"
     >
-      {dir === 'left' ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+      {dir === 'left' ? <ChevronLeftIcon size={15} /> : <ChevronRightIcon size={15} />}
     </button>
   );
 }
@@ -78,7 +48,7 @@ function CarouselRow({ title, children, testid }) {
     const el = scrollerRef.current;
     if (!el) return undefined;
     el.addEventListener('scroll', sync, { passive: true });
-    // scrollWidth settles as posters load — re-check + observe resizes
+    // scrollWidth settles as art loads — re-check + observe resizes
     const ro = new ResizeObserver(sync);
     ro.observe(el);
     const t1 = setTimeout(sync, 900);
@@ -96,8 +66,8 @@ function CarouselRow({ title, children, testid }) {
 
   return (
     <section data-testid={testid || 'home-row'} className="mt-7">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="flex items-center justify-between mb-2.5">
+        <h2 className="text-[13.5px] font-semibold tracking-wide text-[#e2e6f0]">{title}</h2>
         {noScroll ? null : (
           <div className="flex gap-1.5">
             <ArrowBtn dir="left" disabled={!canLeft}
@@ -107,7 +77,7 @@ function CarouselRow({ title, children, testid }) {
           </div>
         )}
       </div>
-      <div ref={scrollerRef} className="row-scroll flex gap-4 overflow-x-auto pb-3 -mx-1 px-1">
+      <div ref={scrollerRef} className="row-scroll flex gap-3.5 overflow-x-auto pb-2 -mx-1 px-1">
         {children}
       </div>
     </section>
@@ -118,32 +88,24 @@ function CarouselRow({ title, children, testid }) {
 
 function HistoryCard({ entry, onOpen, onRemove }) {
   const badge = entry.type === 'series'
-    ? 'S' + (entry.season ?? 1) + ' \u00b7 E' + (entry.episode ?? 1)
-    : (entry.year || 'Movie');
+    ? 'S' + (entry.season ?? 1) + ' E' + (entry.episode ?? 1)
+    : null;
   return (
-    <div className="w-[150px] shrink-0 snap-start">
-      <div
-        data-testid="card"
-        title={entry.title}
-        onClick={() => onOpen({
-          id: entry.imdbId, type: entry.type,
-          name: entry.title, poster: entry.poster
-        })}
-        className="relative aspect-[2/3] rounded-xl overflow-hidden bg-hover border border-edge cursor-pointer transition-transform duration-150 hover:scale-[1.04] hover:border-accent/60 group"
-      >
-        {entry.poster ? (
-          <img
-            src={entry.poster}
-            alt={entry.title + ' poster'}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="absolute inset-0 w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.remove(); }}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-3xl text-dim">🎬</div>
-        )}
-        <span data-testid="cw-badge" className="cw-badge">{badge}</span>
+    <div className="w-[236px] shrink-0 snap-start">
+      <div className="relative">
+        <BackdropCard
+          item={{
+            id: entry.imdbId, type: entry.type, name: entry.title,
+            poster: entry.poster, backdrop: entry.backdrop || null,
+            year: entry.type === 'movie' ? (entry.year || '') : ''
+          }}
+          badge={badge}
+          badgeTestid="cw-badge"
+          onClick={() => onOpen({
+            id: entry.imdbId, type: entry.type,
+            name: entry.title, poster: entry.poster
+          })}
+        />
         <button
           data-testid="cw-remove"
           title="Remove from Continue watching"
@@ -153,9 +115,6 @@ function HistoryCard({ entry, onOpen, onRemove }) {
         >
           <CloseIcon size={13} />
         </button>
-      </div>
-      <div className="pt-1.5">
-        <div className="text-[13px] font-medium text-ink truncate">{entry.title}</div>
       </div>
     </div>
   );
@@ -185,7 +144,7 @@ function ContinueRow({ active, onOpen }) {
 
   if (!items.length) return null;
   return (
-    <CarouselRow title="Continue watching" testid="continue-row">
+    <CarouselRow title="Continue Watching" testid="continue-row">
       {items.map((entry) => (
         <HistoryCard
           key={entry.imdbId + entry.type}
@@ -216,11 +175,12 @@ function SuggestionCard({ item, onOpen }) {
   }, [item, onOpen]);
 
   return (
-    <div className="w-[150px] shrink-0 snap-start">
-      <PosterCard
+    <div className="w-[236px] shrink-0 snap-start">
+      <BackdropCard
         item={{
           id: item.tmdbId, type: item.tmdbType, name: item.name,
-          poster: item.poster, year: item.year, imdbRating: item.imdbRating
+          poster: item.poster, backdrop: item.backdrop || null,
+          year: item.year || '', imdbRating: item.imdbRating
         }}
         onClick={open}
       />
@@ -270,16 +230,16 @@ function SuggestionRows({ active, onOpen }) {
 function Skeleton() {
   return (
     <div data-testid="home-loading" className="-mt-6">
-      <div className="skeleton h-6 w-56 mt-8" />
-      <div className="flex gap-4 mt-4 overflow-hidden">
+      <div className="skeleton h-3.5 w-40 mt-8" />
+      <div className="flex gap-3.5 mt-4 overflow-hidden">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="skeleton w-[150px] h-[225px] shrink-0" />
+          <div key={i} className="skeleton w-[236px] aspect-[16/9] shrink-0" />
         ))}
       </div>
-      <div className="skeleton h-6 w-56 mt-8" />
-      <div className="flex gap-4 mt-4 overflow-hidden pb-6">
+      <div className="skeleton h-3.5 w-40 mt-8" />
+      <div className="flex gap-3.5 mt-4 overflow-hidden pb-6">
         {[...Array(6)].map((_, i) => (
-          <div key={i} className="skeleton w-[150px] h-[225px] shrink-0" />
+          <div key={i} className="skeleton w-[236px] aspect-[16/9] shrink-0" />
         ))}
       </div>
     </div>
@@ -289,7 +249,7 @@ function Skeleton() {
 function SetupCard({ onOpenSettings }) {
   return (
     <div data-testid="home-setup" className="flex justify-center py-24 px-6">
-      <div className="max-w-xl bg-raised border border-edge rounded-2xl p-8 text-center">
+      <div className="max-w-xl bg-raised border border-edge rounded-xl p-8 text-center">
         <h2 className="text-xl font-semibold mb-3">Set up the home page</h2>
         <p className="text-dim text-[15px] leading-relaxed">
           The home page mixes the Streaming Availability API (daily Top&nbsp;10
@@ -308,11 +268,11 @@ function SetupCard({ onOpenSettings }) {
         <button
           data-testid="home-setup-btn"
           onClick={onOpenSettings}
-          className="mt-6 rounded-xl bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
+          className="mt-6 rounded-lg bg-accent px-5 py-2.5 font-bold text-white hover:bg-[#f6121d] transition-colors"
         >
           Open Settings
         </button>
-        <p className="mt-4 text-sm text-dim">Search keeps working without a key.</p>
+        <p className="mt-4 text-sm text-muted">Search keeps working without a key.</p>
       </div>
     </div>
   );
@@ -321,13 +281,13 @@ function SetupCard({ onOpenSettings }) {
 function ErrorCard({ errorMsg, onRetry }) {
   return (
     <div data-testid="home-error" className="flex justify-center py-24 px-6">
-      <div className="max-w-xl bg-raised border border-edge rounded-2xl p-8 text-center">
+      <div className="max-w-xl bg-raised border border-edge rounded-xl p-8 text-center">
         <h2 className="text-xl font-semibold mb-3">Couldn&rsquo;t load the home page</h2>
         <p data-testid="home-error-msg" className="text-dim text-[15px]">{errorMsg}</p>
         <button
           data-testid="home-retry"
           onClick={onRetry}
-          className="mt-6 rounded-xl bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
+          className="mt-6 rounded-lg bg-accent px-5 py-2.5 font-bold text-white hover:bg-[#f6121d] transition-colors"
         >
           Retry
         </button>
@@ -346,7 +306,7 @@ function HomeBody({ data, onOpen, active }) {
       {data.notice ? (
         <p
           data-testid="home-notice"
-          className="mt-4 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
+          className="mt-4 rounded-lg border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
         >
           {data.notice}
         </p>
@@ -355,14 +315,14 @@ function HomeBody({ data, onOpen, active }) {
         row.items && row.items.length ? (
           <CarouselRow key={row.key || ri} title={row.title}>
             {row.items.map((item, ii) => (
-              <div key={ii} className="w-[150px] shrink-0 snap-start">
-                <PosterCard item={item} onClick={() => onOpen(item)} />
+              <div key={ii} className="w-[236px] shrink-0 snap-start">
+                <BackdropCard item={item} onClick={() => onOpen(item)} />
               </div>
             ))}
           </CarouselRow>
         ) : null
       )}
-      <p className="py-6 text-xs leading-relaxed text-dim/80">
+      <p className="py-6 text-[11px] leading-relaxed text-muted/80">
         Home data by the Streaming Availability API (Movie of the Night) &middot;
         Trending &amp; suggestions by TMDB. This product uses the TMDB API but
         is not endorsed or certified by TMDB.
@@ -373,24 +333,18 @@ function HomeBody({ data, onOpen, active }) {
 
 // ── HomeView ──────────────────────────────────────────────────────────────
 
-export default function HomeView({ home, onOpen, onOpenSettings, tab, onTab }) {
-  const feedActive = tab === 'feed';
+export default function HomeView({ home, onOpen, onOpenSettings }) {
   return (
-    <div className="flex min-h-full items-stretch">
-      <Sidebar tab={tab} onTab={onTab} />
-      <div className="flex-1 min-w-0 px-8 pt-4 pb-2">
-        {tab === 'watched' ? (
-          <WatchedView onOpen={onOpen} />
-        ) : home.status === 'loading' || home.status === 'idle' ? (
-          <Skeleton />
-        ) : home.status === 'setup' ? (
-          <SetupCard onOpenSettings={onOpenSettings} />
-        ) : home.status === 'error' ? (
-          <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />
-        ) : (
-          <HomeBody data={home.data} onOpen={onOpen} active={feedActive} />
-        )}
-      </div>
+    <div className="min-h-full">
+      {home.status === 'loading' || home.status === 'idle' ? (
+        <Skeleton />
+      ) : home.status === 'setup' ? (
+        <SetupCard onOpenSettings={onOpenSettings} />
+      ) : home.status === 'error' ? (
+        <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />
+      ) : (
+        <HomeBody data={home.data} onOpen={onOpen} active />
+      )}
     </div>
   );
 }

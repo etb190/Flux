@@ -1,19 +1,16 @@
-/* ── Top bar: brand, global search, settings ───────────────────────────── */
+/* ── Top bar: global search + settings (Stitch style; brand lives in the
+ * sidebar). Also the frameless-window drag region. */
 
 import { SearchIcon, GearIcon } from './icons.jsx';
 
 export default function TopBar({ query, onQueryChange, onEnter, onClear, onOpenSettings }) {
   return (
-    <header className="app-drag flex items-center gap-6 bg-raised border-b border-edge px-6 py-3.5 shrink-0 z-10">
-      <div className="flex items-center gap-2.5 select-none">
-        <img src="./icon.png" alt="" className="w-[30px] h-[30px] rounded-lg" />
-        <span className="text-[19px] font-bold tracking-wide bg-gradient-to-r from-[#8fb4ff] to-accent bg-clip-text text-transparent">
-          Flux
-        </span>
-      </div>
-
-      <div className="app-no-drag relative flex-1 max-w-[640px]">
-        <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
+    <header className="app-drag flex items-center justify-between gap-6 bg-bg border-b border-white/[0.05] px-7 py-3 shrink-0 z-10">
+      <div className="app-no-drag relative flex-1 max-w-[560px]">
+        <SearchIcon
+          size={14}
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none"
+        />
         <input
           id="search"
           data-testid="search-input"
@@ -22,12 +19,11 @@ export default function TopBar({ query, onQueryChange, onEnter, onClear, onOpenS
           placeholder="Search movies & series..."
           autoComplete="off"
           spellCheck={false}
-          autoFocus
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onEnter();
           }}
-          className="w-full rounded-full bg-bg border border-edge px-10 py-2.5 text-[15px] text-ink outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-dim focus:border-accent focus:shadow-[0_0_0_3px_rgba(91,140,255,0.35)]"
+          className="w-full rounded-md bg-search border border-transparent px-9 py-2 text-[13.5px] text-[#c3cad9] outline-none transition-[border-color,background] duration-150 placeholder:text-muted focus:border-[#3a445c] focus:bg-[#1e2436]"
         />
         {query ? (
           <button
@@ -35,7 +31,7 @@ export default function TopBar({ query, onQueryChange, onEnter, onClear, onOpenS
             title="Clear"
             aria-label="Clear search"
             onClick={onClear}
-            className="app-no-drag absolute right-2 top-1/2 -translate-y-1/2 w-[26px] h-[26px] rounded-full text-dim text-lg leading-none hover:bg-hover hover:text-ink"
+            className="app-no-drag absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-muted text-base leading-none hover:bg-hover hover:text-ink"
           >
             &times;
           </button>
@@ -48,9 +44,9 @@ export default function TopBar({ query, onQueryChange, onEnter, onClear, onOpenS
         aria-label="Settings"
         aria-haspopup="dialog"
         onClick={onOpenSettings}
-        className="app-no-drag p-2 rounded-full text-dim hover:text-ink hover:bg-hover"
+        className="app-no-drag flex items-center justify-center w-[38px] h-[38px] rounded-lg text-dim hover:text-ink hover:bg-hover transition-colors"
       >
-        <GearIcon />
+        <GearIcon size={19} />
       </button>
     </header>
   );

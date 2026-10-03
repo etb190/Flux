@@ -35,10 +35,10 @@ function WatchedHit({ item, added, onAdd }) {
         data-testid="watched-add"
         onClick={() => { if (!added) onAdd(item); }}
         className={
-          'shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-bold text-white ' +
+          'shrink-0 rounded-md px-3.5 py-1.5 text-xs font-bold text-white transition-colors ' +
           (added
-            ? 'bg-emerald-700 pointer-events-none'
-            : 'bg-accent hover:brightness-110')
+            ? 'bg-[#1f8b4d] pointer-events-none'
+            : 'bg-accent hover:bg-[#f6121d]')
         }
       >
         {added ? 'Added \u2713' : 'Add'}
@@ -125,31 +125,32 @@ export default function WatchedView({ onOpen }) {
   }, []);
 
   return (
-    <div data-testid="watched-view">
-      <h2 className="text-[22px] font-semibold mt-1">Watched</h2>
-      <p className="mt-1.5 mb-5 text-[13px] leading-relaxed text-dim max-w-xl">
-        Add the movies &amp; series you&rsquo;ve seen &mdash; Flux uses this
-        list to suggest similar titles on the Home tab.
+    <div data-testid="watched-view" className="max-w-[1060px]">
+      <h2 className="text-[22px] font-extrabold mt-1">Watched</h2>
+      <p className="mt-1.5 mb-5 text-[13.5px] leading-relaxed text-dim max-w-xl">
+        Keep track of movies &amp; shows you&rsquo;ve already seen. Flux uses
+        this list to recommend similar titles on the Home page &mdash; TV
+        shows included.
       </p>
 
       <div className="relative max-w-md">
-        <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
+        <SearchIcon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
         <input
           data-testid="watched-search"
           type="text"
           value={query}
           onChange={(e) => handleInput(e.target.value)}
-          placeholder="Search a movie or series to add..."
+          placeholder="Search a movie or show to add..."
           autoComplete="off"
           spellCheck={false}
-          className="w-full rounded-xl border border-edge bg-raised py-2.5 pl-9 pr-3.5 text-[13.5px] font-medium outline-none placeholder:text-dim/70 focus:border-accent focus:ring-2 focus:ring-accent/30"
+          className="w-full rounded-lg border border-transparent bg-search py-2.5 pl-9 pr-3.5 text-[13.5px] text-[#c3cad9] outline-none placeholder:text-muted focus:border-[#3a445c]"
         />
       </div>
 
       {results.length ? (
         <div
           data-testid="watched-results"
-          className="max-w-md mt-2 bg-raised border border-edge rounded-xl overflow-hidden divide-y divide-edge"
+          className="max-w-md mt-3 bg-raised border border-edge rounded-lg overflow-hidden divide-y divide-edge"
         >
           {results.map((item) => (
             <WatchedHit
@@ -162,11 +163,19 @@ export default function WatchedView({ onOpen }) {
         </div>
       ) : null}
 
+      <div className="flex items-baseline gap-2.5 mt-7 mb-3">
+        <h3 className="text-[15.5px] font-bold">Your list</h3>
+        {watched.length ? (
+          <span className="text-[12.5px] text-muted">
+            {watched.length} {watched.length === 1 ? 'title' : 'titles'}
+          </span>
+        ) : null}
+      </div>
       {watched.length ? (
-        <div data-testid="watched-grid" className="mt-7 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4.5 gap-4">
+        <div data-testid="watched-grid" className="grid grid-cols-[repeat(auto-fill,138px)] gap-4 pb-6">
           {watched.map((entry) => (
-            <div key={entry.imdbId + entry.type} className="w-[150px]">
-              <div className="relative">
+            <div key={entry.imdbId + entry.type} className="w-[138px]">
+              <div className="relative group">
                 <PosterCard
                   item={{ id: entry.imdbId, type: entry.type, name: entry.title, poster: entry.poster, year: null }}
                   onClick={() => onOpen({
@@ -188,9 +197,12 @@ export default function WatchedView({ onOpen }) {
           ))}
         </div>
       ) : (
-        <p data-testid="watched-empty" className="mt-5 text-[13px] text-dim/80">
-          Nothing here yet. Search above and add what you&rsquo;ve watched.
-        </p>
+        <div data-testid="watched-empty" className="rounded-xl border border-dashed border-edge bg-raised px-5 py-8 text-center">
+          <h4 className="text-[15px] font-semibold mb-1.5">Nothing here yet</h4>
+          <p className="text-[13px] text-dim m-0">
+            Search above and add what you&rsquo;ve watched to unlock recommendations.
+          </p>
+        </div>
       )}
     </div>
   );

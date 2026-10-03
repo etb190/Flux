@@ -289,6 +289,14 @@ ipcMain.handle('flux:app:relaunch', () => {
 });
 
 // IPC: GPU info for the settings panel (which renderer is actually active)
+// App version: packaged builds report the exe version; dev runs report the
+// electron binary's version, so fall back to package.json there.
+ipcMain.handle('flux:app:version', () => {
+  const v = app.getVersion();
+  if (v !== process.versions.electron) return v;
+  try { return require('../../package.json').version; } catch (_) { return v; }
+});
+
 ipcMain.handle('flux:gpu:info', async () => {
   try {
     const info = await app.getGPUInfo('basic');
