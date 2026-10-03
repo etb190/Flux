@@ -115,7 +115,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   // Reports what is playing to the main process, which owns the single
   // Discord connection. Mirrors Helix's triggers: presence is pushed on
   // play/pause changes, when the duration becomes known, and after seeks
-  // (keeps the remaining-time timestamp honest); timestamps encode the
+  // (keeps the elapsed timestamp honest); timestamps encode the
   // progress, so no per-tick updates. Embeds/trailers never set presence.
   const updatePresence = useCallback((pausedOverride) => {
     const api = typeof window !== 'undefined' ? window.fluxAPI : null;
@@ -459,7 +459,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     });
     art.on('video:pause', () => {
       saveProgressRef.current();
-      updatePresenceRef.current(true);        // paused → (Paused), no countdown
+      updatePresenceRef.current(true);        // paused → (Paused), no elapsed timer
     });
     art.on('video:error', () => {
       const v = art.video;

@@ -5,10 +5,11 @@
 //     \\?\pipe\discord-ipc-N) owned by the main process.
 //   • Idle presence "Browsing Netflix" with the session start time.
 //   • Watching a movie  → details "Watching {title}", state "(year)",
-//     large image = poster URL, timestamps = remaining time.
+//     large image = poster URL, timestamps = elapsed position (Discord
+//     counts UP the hours/minutes/seconds you are into the video).
 //   • Watching a series → details "Watching {title}", state
 //     "S{x}E{y}: {episode}" (+ " (Paused)"), same image/timestamp rules.
-//   • Paused → timestamps are removed (Discord stops the countdown).
+//   • Paused → timestamps are removed (Discord stops the elapsed timer).
 //   • Leaving the player → back to idle (only if not already idle).
 //   • A live toggle (default ON): off = clear presence + disconnect,
 //     on = reconnect + restore the last presence.
@@ -42,18 +43,14 @@ const TYPE_WATCHING = 3;
 const APP_NAME = 'Netflix';
 
 // ── Pure presence builders (unit-testable, no client involved) ───────────
-// Timestamps mirror Helix: paused → none; otherwise remaining time
-// (end = now + duration - position) when the duration is known, else the
-// elapsed time (start = now - position).
+// Timestamps show ELAPSED progress (deliberate Flux change vs Helix's
+// remaining-time countdown): paused → none; otherwise start = now -
+// position, so Discord renders the current hour/minute/second you are on
+// and counts up while you watch.
 
-function buildTimestamps({ now, positionSec, durationSec, paused }) {
+function buildTimestamps({ now, positionSec, paused }) {
   if (paused) return undefined;
   const position = Number(positionSec);
-  const duration = Number(durationSec);
-  if (Number.isFinite(duration) && duration > 0 && Number.isFinite(position) && position >= 0) {
-    const remaining = Math.max(0, Math.round(duration - position));
-    return { endTimestamp: new Date(now + remaining * 1000) };
-  }
   if (Number.isFinite(position) && position > 0) {
     return { startTimestamp: new Date(now - Math.round(position) * 1000) };
   }
