@@ -238,16 +238,29 @@ export default function App() {
     }
   }, [meta, episode]);
 
-  // ── trailer playback (YouTube embed via the player's webview path) ────
-  // Trailer sessions never touch the watch history.
-  const openTrailer = useCallback((ytId) => {
+  // ── trailer playback (YouTube via the browser-native iframe path) ──────
+  // YouTube's 2025 anti-anonymous-embed policy (error 153) requires the
+  // player to sit in a real-origin host page — the main process serves one
+  // on http://127.0.0.1 and hands us the URL. Trailer sessions never touch
+  // the watch history.
+  const openTrailer = useCallback(async (ytId) => {
     if (!ytId) return;
     detailsSeqRef.current++;
     streams.stopScan();
     resumeEntryRef.current = null;
     setResumeSec(0);
+    let url = null;
+    const api = typeof window !== 'undefined' ? window.fluxAPI : null;
+    if (api && typeof api.trailerUrl === 'function') {
+      url = await Promise.resolve(api.trailerUrl(ytId)).catch(() => null);
+    }
+    if (!url) {
+      // Plain-browser fallback (vite dev outside Electron): from a real
+      // http origin the standard embed iframe carries its referrer anyway.
+      url = 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&rel=0';
+    }
     setActiveSource({
-      url: 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&rel=0',
+      url,
       format: 'Embed',
       provider: 'YouTube',
       title: 'Official Trailer',
@@ -435,7 +448,7 @@ export default function App() {
           {inDetailsFlow ? (
             <section
               data-testid="details"
-              className="detail-page flex flex-col min-h-full"
+              className="detail-page flex flex-col min-h-full shrink-0"
             >
               {/* One layer: back / breadcrumb / search are part of the
                   content layer (Stitch detail screens), not app chrome. */}

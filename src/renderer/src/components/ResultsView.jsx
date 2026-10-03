@@ -14,7 +14,7 @@ export default function ResultsView({ query, items, onOpen }) {
         </h2>
         <span
           data-testid="results-count"
-          className="text-xs font-semibold text-dim bg-search border border-edge rounded-full px-2.5 py-0.5"
+          className="text-xs font-semibold text-dim bg-search border border-edge px-2.5 py-0.5"
         >
           {items.length} {items.length === 1 ? 'title' : 'titles'}
         </span>

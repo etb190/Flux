@@ -33,7 +33,7 @@ export function EmptyPane() {
 
 export function GenreChip({ children }) {
   return (
-    <span className="rounded-full bg-hover border border-edge px-2.5 py-0.5 text-xs text-dim whitespace-nowrap">
+    <span className=" bg-hover border border-edge px-2.5 py-0.5 text-xs text-dim whitespace-nowrap">
       {children}
     </span>
   );

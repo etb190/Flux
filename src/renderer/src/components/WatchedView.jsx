@@ -19,11 +19,11 @@ function WatchedHit({ item, added, onAdd }) {
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"
-          className="w-[34px] h-[50px] rounded-md object-cover bg-hover shrink-0"
+          className="w-[34px] h-[50px] object-cover bg-hover shrink-0"
           onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
         />
       ) : (
-        <div className="w-[34px] h-[50px] rounded-md bg-hover shrink-0" />
+        <div className="w-[34px] h-[50px] bg-hover shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <div className="text-[13px] font-semibold truncate">{item.name}</div>
@@ -35,7 +35,7 @@ function WatchedHit({ item, added, onAdd }) {
         data-testid="watched-add"
         onClick={() => { if (!added) onAdd(item); }}
         className={
-          'shrink-0 rounded-md px-3.5 py-1.5 text-xs font-bold text-white transition-colors ' +
+          'shrink-0 px-3.5 py-1.5 text-xs font-bold text-white transition-colors ' +
           (added
             ? 'bg-[#1f8b4d] pointer-events-none'
             : 'bg-accent hover:bg-[#f6121d]')
@@ -150,7 +150,7 @@ export default function WatchedView({ onOpen }) {
       {results.length ? (
         <div
           data-testid="watched-results"
-          className="max-w-md mt-3 bg-raised border border-edge rounded-lg overflow-hidden divide-y divide-edge"
+          className="max-w-md mt-3 bg-raised border border-edge overflow-hidden divide-y divide-edge"
         >
           {results.map((item) => (
             <WatchedHit
@@ -197,7 +197,7 @@ export default function WatchedView({ onOpen }) {
           ))}
         </div>
       ) : (
-        <div data-testid="watched-empty" className="rounded-xl border border-dashed border-edge bg-raised px-5 py-8 text-center">
+        <div data-testid="watched-empty" className=" border border-dashed border-edge bg-raised px-5 py-8 text-center">
           <h4 className="text-[15px] font-semibold mb-1.5">Nothing here yet</h4>
           <p className="text-[13px] text-dim m-0">
             Search above and add what you&rsquo;ve watched to unlock recommendations.

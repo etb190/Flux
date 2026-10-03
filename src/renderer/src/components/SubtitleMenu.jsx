@@ -18,7 +18,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
   return (
     <div
       data-testid="player-submenu"
-      className="absolute right-4 top-16 w-[380px] max-h-[70%] flex flex-col rounded-xl bg-raised/95 backdrop-blur border border-edge shadow-2xl z-20 overflow-hidden"
+      className="absolute right-4 top-16 w-[380px] max-h-[70%] flex flex-col bg-raised/95 backdrop-blur border border-edge shadow-2xl z-20 overflow-hidden"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-edge shrink-0">
         <span className="font-semibold">Subtitles</span>
@@ -28,7 +28,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
             title="Search subtitles again"
             aria-label="Search subtitles again"
             onClick={onRefresh}
-            className="p-1.5 rounded-lg text-dim hover:text-ink hover:bg-hover"
+            className="p-1.5 text-dim hover:text-ink hover:bg-hover"
           >
             <RefreshIcon />
           </button>
@@ -37,7 +37,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
             title="Close"
             aria-label="Close subtitle menu"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-dim hover:text-ink hover:bg-hover"
+            className="p-1.5 text-dim hover:text-ink hover:bg-hover"
           >
             <CloseIcon />
           </button>
@@ -55,7 +55,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
         <div
           onClick={subs.off}
           className={
-            'px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors hover:bg-hover ' +
+            'px-3 py-2 cursor-pointer text-sm transition-colors hover:bg-hover ' +
             (!subs.selectedUrl && subs.embeddedActive == null
               ? 'text-accent font-medium bg-accent/10'
               : 'text-ink')
@@ -75,12 +75,12 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
                 key={tr.id}
                 onClick={() => subs.selectEmbedded(tr.id)}
                 className={
-                  'flex items-center justify-between gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm hover:bg-hover ' +
+                  'flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-sm hover:bg-hover ' +
                   (subs.embeddedActive === tr.id ? 'text-accent bg-accent/10' : 'text-ink')
                 }
               >
                 <span className="truncate">{tr.name || tr.lang || 'Subtitle track'}</span>
-                <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-dim shrink-0">
+                <span className=" bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-dim shrink-0">
                   Track
                 </span>
               </div>
@@ -109,17 +109,17 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
                     if (!isActive && !isLoading) subs.selectVariant(variant);
                   }}
                   className={
-                    'flex items-center justify-between gap-2 px-3 py-2 rounded-lg cursor-pointer text-sm hover:bg-hover ' +
+                    'flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-sm hover:bg-hover ' +
                     (isActive ? 'text-accent bg-accent/10' : 'text-ink')
                   }
                 >
                   <span className="truncate">{variant.title || variant.language}</span>
                   <span className="flex items-center gap-1.5 shrink-0">
-                    <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-dim">
+                    <span className=" bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-dim">
                       {variant.providerName || 'Sub'}
                     </span>
                     {variant.format && variant.format !== 'srt' ? (
-                      <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-gold">
+                      <span className=" bg-hover px-1.5 py-0.5 text-[10px] font-semibold text-gold">
                         {String(variant.format).toUpperCase()}
                       </span>
                     ) : null}
@@ -139,7 +139,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
           data-testid="psm-delay-minus"
           title="Subtitles 0.1s earlier"
           onClick={onDelayMinus}
-          className="w-7 h-7 rounded-lg bg-hover border border-edge text-ink hover:border-accent"
+          className="w-7 h-7 bg-hover border border-edge text-ink hover:border-accent"
         >
           &minus;
         </button>
@@ -150,7 +150,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
           data-testid="psm-delay-plus"
           title="Subtitles 0.1s later"
           onClick={onDelayPlus}
-          className="w-7 h-7 rounded-lg bg-hover border border-edge text-ink hover:border-accent"
+          className="w-7 h-7 bg-hover border border-edge text-ink hover:border-accent"
         >
           +
         </button>

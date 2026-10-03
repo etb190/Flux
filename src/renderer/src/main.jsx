@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component {
           </p>
           <button
             onClick={() => this.setState({ error: null })}
-            className="rounded-xl bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
+            className=" bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
           >
             Reload
           </button>

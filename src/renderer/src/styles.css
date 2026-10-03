@@ -91,7 +91,6 @@ body {
 }
 .scroll-dark::-webkit-scrollbar-thumb {
   background: #2e2e2e;
-  border-radius: 4px;
 }
 .scroll-dark::-webkit-scrollbar-thumb:hover {
   background: #3f3f3f;
@@ -116,7 +115,6 @@ body {
   background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
   background-size: 800px 100%;
   animation: flux-shimmer 1.4s infinite linear;
-  border-radius: 6px;
 }
 
 /* Netflix-style Top 10 rank badge */
@@ -130,7 +128,6 @@ body {
   color: #fff;
   background: rgba(229, 9, 20, 0.94);
   padding: 0 7px;
-  border-radius: 5px;
   line-height: 22px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
@@ -235,7 +232,6 @@ body {
   color: var(--color-dim);
   background: var(--color-raised);
   border: 1px solid var(--color-edge);
-  border-radius: 6px;
   cursor: pointer;
   padding: 0;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -263,7 +259,6 @@ body {
   letter-spacing: 0.06em;
   color: #fff;
   background: rgba(0, 0, 0, 0.68);
-  border-radius: 4px;
   backdrop-filter: blur(3px);
   white-space: nowrap;
   overflow: hidden;
@@ -281,7 +276,6 @@ body {
   color: #d7dbe6;
   background: rgba(0, 0, 0, 0.68);
   border: none;
-  border-radius: 6px;
   cursor: pointer;
   opacity: 0;
   transform: scale(0.9);
@@ -328,7 +322,6 @@ body {
 }
 .detail-chip {
   padding: 2px 6px;
-  border-radius: 4px;
   font-size: 10px;
   line-height: 1.4;
   font-weight: 700;
@@ -336,21 +329,26 @@ body {
   background: rgba(34, 34, 34, 0.9);
   color: #d4d4d4;
 }
+/* Size filter — square, EXACTLY the height of the search input beside it
+   (text-sm + py-2 + 2px border = 38px), with a chevron affordance */
 .detail-select {
   -webkit-appearance: none;
   appearance: none;
-  background: #1c1c1c;
+  box-sizing: border-box;
+  height: 38px;
+  background: #1c1c1c
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239b9b9b' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 12px center;
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 8px 30px 8px 14px;
-  border-radius: 8px;
-  border: none;
+  padding: 0 34px 0 14px;
+  border: 1px solid var(--color-edge);
   cursor: pointer;
   outline: none;
 }
 .detail-select:hover {
-  background: #242424;
+  background-color: #242424;
 }
 .detail-select option {
   background: #1c1c1c;
@@ -378,7 +376,6 @@ body {
   color: #fff;
   background: rgba(0, 0, 0, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
   cursor: pointer;
   padding: 0;
   backdrop-filter: blur(4px);
@@ -408,7 +405,6 @@ body {
   color: #d4d4d4;
   background: #1c1c1c;
   border: 1px solid transparent;
-  border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
@@ -446,6 +442,15 @@ body {
 }
 .art-control-flux-cc.flux-ctl-active svg {
   color: var(--color-accent);
+}
+
+/* ── ZERO BORDER-RADIUS POLICY (user: no rounded borders anywhere) ───────
+   Every box/button/card/pill/input is square. The safety net keeps any
+   rounded-* utility (now or in the future) from showing a curve; only the
+   spinners keep their 50% circle — that's the spinner's body, not a
+   border. */
+#root *:not(.spinner):not(.psm-spinner) {
+  border-radius: 0 !important;
 }
 
 /* Watched page: search result rows */

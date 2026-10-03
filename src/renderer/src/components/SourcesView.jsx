@@ -160,13 +160,13 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
           </p>
         </div>
         {scan.sources.length > 0 && !scanning ? (
-          <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-medium flex items-center gap-2 border border-emerald-500/20 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs px-3 py-1 bg-emerald-500/10 text-emerald-400 font-medium flex items-center gap-2 border border-emerald-500/20 shrink-0">
+            <span className="w-2 h-2 bg-emerald-400 animate-pulse" />
             {scan.sources.length} source{scan.sources.length > 1 ? 's' : ''} operational
           </span>
         ) : scanning ? (
-          <span className="text-xs px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 font-medium flex items-center gap-2 border border-amber-500/20 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
+          <span className="text-xs px-3 py-1 bg-amber-500/10 text-amber-300 font-medium flex items-center gap-2 border border-amber-500/20 shrink-0">
+            <span className="w-2 h-2 bg-amber-300 animate-pulse" />
             Scanning
           </span>
         ) : null}

@@ -37,14 +37,14 @@ export default function PosterCard({ item, onClick, testid }) {
         ) : null}
 
         {item.imdbRating && item.imdbRating !== 'null' ? (
-          <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/75 px-1.5 py-0.5 text-[11px] font-semibold text-gold">
+          <span className="absolute bottom-1.5 left-1.5 bg-black/75 px-1.5 py-0.5 text-[11px] font-semibold text-gold">
             ★ {item.imdbRating}
           </span>
         ) : null}
 
         <span
           className={
-            'absolute top-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ' +
+            'absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ' +
             (item.type === 'series' ? 'bg-series/80 !text-[#1d1d1d]' : 'bg-black/70')
           }
         >

@@ -350,7 +350,7 @@ function HomeBody({ data, onOpen, active, onResume }) {
       {data.notice ? (
         <p
           data-testid="home-notice"
-          className="mt-4 rounded-lg border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
+          className="mt-4 border border-gold/40 bg-gold/10 px-4 py-3 text-sm text-gold"
         >
           {data.notice}
         </p>

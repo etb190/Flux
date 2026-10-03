@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Flux - streaming app (Electron + React + Vite)",
   "main": "./out/main/index.js",
   "author": "etb190",

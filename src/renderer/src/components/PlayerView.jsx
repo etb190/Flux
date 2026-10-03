@@ -97,6 +97,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   const [videoReady, setVideoReady] = useState(false);   // Artplayer mounted
 
   const isEmbed = source.format === 'Embed';
+  const isTrailer = Boolean(source.trailer);
   const isDash = source.format === 'DASH' || /\.mpd($|\?)/i.test(source.url);
 
   // refs mirroring state for use inside timers / event closures
@@ -198,13 +199,17 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     resumeAppliedRef.current = false;          // re-arm the same-source resume seek
     stopChromeHide();
 
-    applyPlayerRules(source, sources);
-
     if (isEmbed) {
+      // Trailer → a plain <iframe> pointing at our localhost host page
+      // (YouTube error-153 fix, see App.openTrailer): the browser plays
+      // the video natively, no Artplayer/webview chrome involved.
+      if (isTrailer) setBuffering(false);
       // <webview> is rendered below; its event listeners attach in a
       // dedicated effect once the element exists.
       return undefined;
     }
+
+    applyPlayerRules(source, sources);
 
     if (isDash) {
       showPlayerFail('DASH streams aren\u2019t supported by this player yet. Pick another source below.');
@@ -418,7 +423,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     });
 
     // Auto-fetch subtitles for this episode/movie (Helix _fetchInitialSubtitles)
-    subs.search(false);
+    if (!isTrailer) subs.search(false);
 
     return () => {
       clearTimeout(failTimerRef.current);
@@ -434,9 +439,10 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
-  // ── webview listeners (embed sources) ──────────────────────────────────
+  // ── webview listeners (embed sources — trailers use a plain iframe and
+  //    need none of these) ───────────────────────────────────────────────
   useEffect(() => {
-    if (!isEmbed) return undefined;
+    if (!isEmbed || isTrailer) return undefined;
     const wv = webviewRef.current;
     if (!wv) return undefined;
     const onReady = () => setBuffering(false);
@@ -453,7 +459,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       wv.removeEventListener('did-finish-load', onFinish);
       wv.removeEventListener('did-fail-load', onFail);
     };
-  }, [isEmbed, showPlayerFail]);
+  }, [isEmbed, isTrailer, showPlayerFail]);
 
   // ── teardown on unmount (closePlayer) ─────────────────────────────────
   useEffect(() => {
@@ -585,23 +591,40 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       >
         <button
           data-testid="player-back"
-          title="Back to sources"
-          aria-label="Back to sources"
+          title="Return"
+          aria-label="Return"
           onClick={onBack}
-          className="flex items-center gap-1.5 text-dim hover:text-ink"
+          className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
         >
           <BackIcon />
-          <span className="text-sm font-medium">Sources</span>
+          <span>Return</span>
         </button>
         <div className="flex-1 min-w-0">
           <div data-testid="player-title" className="text-[15px] font-semibold truncate">{titleText}</div>
           <div data-testid="player-sub" className="text-xs text-dim truncate">{subText}</div>
         </div>
+        {isTrailer ? (
+          <button
+            data-testid="trailer-external"
+            title="Open this trailer on YouTube"
+            onClick={() => {
+              try {
+                const v = new URL(source.url, location.href).searchParams.get('v');
+                if (v && window.fluxAPI && typeof window.fluxAPI.openExternal === 'function') {
+                  window.fluxAPI.openExternal('https://www.youtube.com/watch?v=' + v);
+                }
+              } catch (_err) {}
+            }}
+            className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
+          >
+            <span>Open on YouTube</span>
+          </button>
+        ) : null}
         <button
           data-testid="player-switch"
           title="Pick a different source"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent"
+          className="flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
         >
           <SwitchIcon />
           <span>Change source</span>
@@ -612,6 +635,19 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       <div ref={stageRef} data-testid="player-stage" className="relative flex-1 bg-black overflow-hidden">
         {!isEmbed ? (
           <div ref={containerRef} data-testid="player-art" className="absolute inset-0" />
+        ) : isTrailer ? (
+          /* Browser-native YouTube playback: our host page (real
+             http://127.0.0.1 origin) iframes the embed so the player gets
+             the referrer YouTube's error-153 policy demands. */
+          <iframe
+            data-testid="trailer-frame"
+            src={source.url}
+            title={titleText}
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            className="player-webview"
+          />
         ) : (
           <webview
             ref={webviewRef}
@@ -630,7 +666,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             className="absolute bottom-[84px] left-0 right-0 flex justify-center px-10 pointer-events-none z-10"
           >
             <span
-              className="max-w-3xl rounded-lg px-4 py-1.5 text-center leading-snug text-white whitespace-pre-line"
+              className="max-w-3xl px-4 py-1.5 text-center leading-snug text-white whitespace-pre-line"
               style={{
                 fontSize: Math.round(18 * style.scale) + 'px',
                 background: 'rgba(0, 0, 0, ' + style.bg + ')'
@@ -675,7 +711,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             <button
               data-testid="player-fail-back"
               onClick={onBack}
-              className="mt-2 rounded-xl bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
+              className="mt-2 bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
             >
               Pick another source
             </button>

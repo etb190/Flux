@@ -62,7 +62,7 @@ function HScroller({ children, testid, scrollerTestid }) {
       <div
         ref={scrollerRef}
         data-testid={scrollerTestid}
-        className="epi-scroll flex gap-[3px] overflow-x-auto py-1 px-8 -mx-8"
+        className="epi-scroll flex gap-[3px] overflow-x-auto py-0.5 px-8 -mx-8"
       >
         {children}
       </div>
@@ -123,16 +123,14 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
       {/* Cinematic scrims (to-t / to-r) + red bleed, per the Stitch screens */}
       <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
       <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/85 to-transparent" />
-      <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 blur-3xl pointer-events-none" />
 
       {/* Content */}
-      <div className="relative z-10 px-8 pt-14 pb-9 max-w-4xl">
-        {/* Tag pill row */}
+      <div className="relative z-10 px-8 pt-14 pb-7 max-w-4xl">
+        {/* Type pill — plain "Series" / "Movie" */}
         <div className="flex items-center gap-2.5 mb-3 flex-wrap">
           <span className="text-accent font-black tracking-widest text-[11px] uppercase bg-black/40 px-2 py-0.5 shadow-sm">
-            F <span className="text-gray-300 font-semibold tracking-wider ml-1">
-              {isSeries ? 'Series' : 'Movie'}
-            </span>
+            {isSeries ? 'Series' : 'Movie'}
           </span>
           {pct != null ? (
             <span
@@ -189,8 +187,8 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
           </p>
         ) : null}
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Actions — kept tight together */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
             data-testid="find-sources"
             onClick={onPlayPrimary}
@@ -239,10 +237,8 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, 
 function Overview({ meta }) {
   const isSeries = meta.type === 'series';
   const facts = (meta.genres || []).slice(0, 3);
+  // Info card: genre + country only (user request — no cast/writer block)
   const rows = [
-    ['Cast:', (meta.cast || []).slice(0, 6).join(', ')],
-    ['Director:', meta.director],
-    ['Writer:', meta.writer],
     ['Country:', meta.country],
     ['Genres:', (meta.genres || []).join(', ')]
   ].filter(([, v]) => v);
@@ -250,7 +246,7 @@ function Overview({ meta }) {
   return (
     <section
       data-testid="details-overview"
-      className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8 border-b border-white/5"
+      className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-5 border-b border-white/5"
     >
       <div className="lg:col-span-2 space-y-4 min-w-0">
         <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
@@ -376,7 +372,7 @@ function Episodes({ meta, onFindSources }) {
   }
 
   return (
-    <section data-testid="details-episodes" className="flex flex-col gap-4">
+    <section data-testid="details-episodes" className="flex flex-col gap-2">
       <h2 className="text-xl font-bold text-white tracking-wide">Episodes</h2>
 
       {/* Season buttons — one line, scrollable with edge arrows */}
@@ -486,7 +482,7 @@ export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
         onPlayTrailer={onPlayTrailer}
       />
 
-      <div className="px-8 py-8 space-y-9">
+      <div className="px-8 py-6 space-y-5">
         <Overview meta={meta} />
 
         {isSeries ? (

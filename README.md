@@ -4,8 +4,28 @@ A lightweight streaming app for Windows, built with **Electron + React + Vite** 
 
 Flux uses the same metadata source as [Helix](https://github.com/etb190/Helix) (the Stremio Cinemeta addon) to search movies & series, and a home page filled by the Streaming Availability API (daily Top 10s, popular per service, new & leaving soon) mixed with TMDB trending.
 
-## Status (v0.17.0)
+## Status (v0.18.0)
 
+- [x] ZERO border-radius policy: every box, button, card, pill, input and
+      dropdown across the app is perfectly square (global CSS guarantee)
+- [x] Trailers fixed: YouTube's 2025 anti-anonymous-embed policy (Error 153
+      "Video player configuration error") rejected the old webview path —
+      trailers now play through a browser-native iframe on a localhost host
+      page served by the main process (real origin → referrer YouTube
+      requires), plus an "Open on YouTube" escape hatch; never recorded in
+      Continue watching; Return lands back on the details screen
+- [x] Details page: plain "Series" / "Movie" pill (no more "F Series"),
+      Play / Trailer / Watched buttons pulled close together, info card
+      trimmed to genre + country (cast/director/writer removed), and the
+      oversized spacing between hero → storyline → Episodes → season list
+      → episode cards tightened throughout
+- [x] One black: the details page background no longer splits into two
+      tones (flex-shrink bug let the app background leak below the fold) —
+      the whole page is the hero's #0a0a0a
+- [x] Player chrome: the back button is now a styled "Return" button
+      (was an unstyled "Sources" label), matching the "Change source" button
+- [x] Sources view: size filter dropdown rebuilt — square, exactly the
+      height of the search input beside it, with a chevron affordance
 - [x] Light-black dark mode: neutral gray stack (no blue tint) — #121212 main,
       #0d0d0d sidebar, #1a1a1a cards, red #E50914 accent, Inter font
 - [x] Home page: square-cornered 16:9 backdrop cards with a tiny 3px gap,
@@ -16,13 +36,11 @@ Flux uses the same metadata source as [Helix](https://github.com/etb190/Helix) (
 - [x] Details hero: full-bleed art, match pill, IMDb chip, red-gradient series
       title, Play / **Trailer** (YouTube) / add-to-Watched actions — the hero
       stays above the storyline on every page length
-- [x] Episodes rebuilt: season pill buttons in one scrollable line (arrows when
-      they overflow) and episode CARDS in one scrollable line — banner, red
+- [x] Episodes: season buttons in one scrollable line (arrows when they
+      overflow) and episode CARDS in one scrollable line — banner, red
       "EP n", bold white title, light-gray description, uniform card sizes
 - [x] Sources view: uniform server cards (no "recommended" highlighting),
       format/quality chips, operational badge, Stream Now actions
-- [x] Trailers on movie & TV screens: Cinemeta trailer → YouTube embed in the
-      player layer; never recorded in Continue watching; Back returns to details
 - [x] Continue Watching: first row, S/E + time-left badge, red progress bar,
       same-source resume from the saved timestamp, hover x dismiss (persisted)
 - [x] Player: **Artplayer** engine + hls.js — CC (subtitles) and fullscreen

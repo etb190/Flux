@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
@@ -7,6 +7,7 @@ const home = require('./home.js');
 const library = require('./library.js');
 const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
+const trailers = require('./trailerserver.js');
 
 // ── Squirrel (Windows installer lifecycle) ──────────────────────────────
 // When Flux is installed/updated/uninstalled by Squirrel.Windows it is
@@ -218,6 +219,21 @@ ipcMain.handle('flux:player-rules:clear', () => {
   return true;
 });
 
+// ── IPC: trailer host URL (YouTube error-153 fix — real-origin iframe) ───
+ipcMain.handle('flux:trailer:url', (_e, ytId) => trailers.trailerUrl(ytId));
+
+// ── IPC: open a URL in the system browser (https/http only) ──────────────
+ipcMain.handle('flux:open-external', (_e, url) => {
+  try {
+    const u = new URL(String(url || ''));
+    if (u.protocol === 'https:' || u.protocol === 'http:') {
+      shell.openExternal(u.toString());
+      return true;
+    }
+  } catch (_err) {}
+  return false;
+});
+
 // ── IPC: app settings (graphics backend etc.) ────────────────────────────
 ipcMain.handle('flux:settings:get', () => ({
   ...loadSettings(settingsFile()),
@@ -325,5 +341,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  trailers.stop();
   if (process.platform !== 'darwin') app.quit();
 });

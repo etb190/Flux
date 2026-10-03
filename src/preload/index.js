@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   watchedRemove: (imdbId) => ipcRenderer.invoke('flux:watched:remove', imdbId),
   // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
   getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
+  // Trailers: host-page URL for the YouTube embed (error-153 fix) and the
+  // system-browser escape hatch
+  trailerUrl: (ytId) => ipcRenderer.invoke('flux:trailer:url', ytId),
+  openExternal: (url) => ipcRenderer.invoke('flux:open-external', url),
   appVersion: () => ipcRenderer.invoke('flux:app:version'),
   tmdbToImdb: (tmdbId, type) => ipcRenderer.invoke('flux:tmdb:imdb', tmdbId, type)
 });

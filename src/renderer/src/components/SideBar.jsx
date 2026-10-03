@@ -22,7 +22,7 @@ export default function SideBar({ active, onTab }) {
       data-testid={'side-' + id}
       onClick={() => onTab(id)}
       className={
-        'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-left transition-colors ' +
+        'flex items-center gap-2.5 px-3 py-2 text-[13.5px] text-left transition-colors ' +
         (active === id
           ? 'bg-hover/70 font-semibold text-white'
           : 'font-medium text-dim hover:text-ink hover:bg-hover/40')
