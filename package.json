@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Flux - streaming app (Electron + React + Vite)",
   "main": "./out/main/index.js",
   "author": "etb190",
@@ -15,6 +15,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@xhayper/discord-rpc": "^1.5.1",
     "artplayer": "^5.4.0",
     "electron-squirrel-startup": "^1.0.1",
     "hls.js": "^1.7.3",

@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   // Settings (graphics backend etc.) + relaunch + GPU info
   getSettings: () => ipcRenderer.invoke('flux:settings:get'),
   saveSettings: (patch) => ipcRenderer.invoke('flux:settings:set', patch),
+  // Discord Rich Presence (Helix DiscordRpcService pattern): the renderer
+  // reports what is playing / that the player closed; main owns the pipe.
+  discordSet: (payload) => ipcRenderer.invoke('flux:discord:set', payload),
+  discordIdle: () => ipcRenderer.invoke('flux:discord:idle'),
   relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
   getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
   // Home page (Cinemeta addon catalogs + TMDB trending)

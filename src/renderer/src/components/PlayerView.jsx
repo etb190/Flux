@@ -109,6 +109,46 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   useEffect(() => { idleRef.current = idle; }, [idle]);
   const toggleSubmenuRef = useRef(() => {});
   const saveProgressRef = useRef(() => {});
+  const updatePresenceRef = useRef(() => {});
+
+  // ── Discord Rich Presence (Helix _updateDiscordRpc port) ───────────────
+  // Reports what is playing to the main process, which owns the single
+  // Discord connection. Mirrors Helix's triggers: presence is pushed on
+  // play/pause changes, when the duration becomes known, and after seeks
+  // (keeps the remaining-time timestamp honest); timestamps encode the
+  // progress, so no per-tick updates. Embeds/trailers never set presence.
+  const updatePresence = useCallback((pausedOverride) => {
+    const api = typeof window !== 'undefined' ? window.fluxAPI : null;
+    if (!api || typeof api.discordSet !== 'function') return;
+    if (isEmbed || isTrailer) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const title = (meta && meta.name) || source.title || '';
+    if (!title) return;
+    const isSeries = Boolean(meta && meta.type === 'series');
+    const paused = typeof pausedOverride === 'boolean'
+      ? pausedOverride
+      : Boolean(v.paused);
+    api.discordSet({
+      kind: isSeries ? 'series' : 'movie',
+      title,
+      year: meta && meta.year ? String(meta.year) : null,
+      season: isSeries && episode ? (episode.season ?? 1) : null,
+      episode: isSeries && episode ? (episode.episode ?? 1) : null,
+      episodeTitle: isSeries && episode ? (episode.title || '') : null,
+      posterUrl: (meta && (meta.background || meta.poster)) || null,
+      positionSec: Number.isFinite(v.currentTime) ? Math.floor(v.currentTime) : null,
+      durationSec: Number.isFinite(v.duration) && v.duration > 0 ? Math.floor(v.duration) : null,
+      paused
+    }).catch(() => {});
+  }, [meta, episode, source, isEmbed, isTrailer]);
+  useEffect(() => { updatePresenceRef.current = updatePresence; }, [updatePresence]);
+
+  // Late-landing meta (resume flow) / episode switches → refresh presence
+  // once the video element exists (guard inside updatePresence handles it).
+  useEffect(() => {
+    updatePresenceRef.current();
+  }, [meta, episode]);
 
   const showPlayerFail = useCallback((msg) => {
     clearTimeout(failTimerRef.current);
@@ -405,17 +445,22 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       tryResumeSeek();
     });
     art.on('video:loadedmetadata', tryResumeSeek);
+    art.on('video:seeked', () => { updatePresenceRef.current(); });
     art.on('video:playing', () => {
       playedOnceRef.current = true;
       clearTimeout(failTimerRef.current);
       failTimerRef.current = null;
       setBuffering(false);
       setFailMsg(null);
+      updatePresenceRef.current(false);       // playing → presence w/ timestamps
     });
     art.on('video:waiting', () => {
       if (!failMsgRef.current) setBuffering(true);
     });
-    art.on('video:pause', () => { saveProgressRef.current(); });
+    art.on('video:pause', () => {
+      saveProgressRef.current();
+      updatePresenceRef.current(true);        // paused → (Paused), no countdown
+    });
     art.on('video:error', () => {
       const v = art.video;
       if (!v || !v.currentSrc) return;          // teardown clears src — ignore
@@ -471,6 +516,8 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       subs.stopInFlight();
       const api = window.fluxAPI;
       if (api && typeof api.clearPlayerRules === 'function') api.clearPlayerRules();
+      // Helix dispose(): leaving the player returns the presence to idle.
+      if (api && typeof api.discordIdle === 'function') api.discordIdle().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

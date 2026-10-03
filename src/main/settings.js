@@ -27,9 +27,12 @@ const ANGLE_BACKENDS = [
 // D3D9 is the out-of-the-box pick (same as choosing it in the browser flag).
 // tmdbApiKey:  TMDB v3 key for the TMDB-powered home rows (trending + the
 //              "Because you watched …" suggestions from the Watched list).
+// discordRpcEnabled: Discord Rich Presence broadcast (Helix behavior — on
+//              by default, live toggle, presence cleared when turned off).
 const DEFAULTS = {
   angleBackend: 'd3d9',
-  tmdbApiKey: '19d475b19a2a345b560687918d8ee98b'
+  tmdbApiKey: '19d475b19a2a345b560687918d8ee98b',
+  discordRpcEnabled: true
 };
 
 // settingsVersion 2: v0.9.0 stored 'default' both for "never picked" and for
@@ -44,7 +47,10 @@ const DEFAULTS = {
 // (free tier quota exhausted). saaApiKey/saaCountry are dropped from the
 // stored file — home rows now come from the Cinemeta addon catalogs, which
 // need no key.
-const SETTINGS_VERSION = 4;
+//
+// settingsVersion 5: Discord Rich Presence toggle (Helix parity). New
+// discordRpcEnabled default (true) — a one-time rewrite stamps v5.
+const SETTINGS_VERSION = 5;
 
 function normalizeBackend(value) {
   const v = String(value || '').toLowerCase().trim();
@@ -56,11 +62,19 @@ function normalizeApiKey(value) {
   return /^[A-Za-z0-9_-]{10,200}$/.test(v) ? v : '';
 }
 
+function normalizeBool(value) {
+  if (value === true || value === 'true' || value === 1) return true;
+  if (value === false || value === 'false' || value === 0) return false;
+  return null;
+}
+
 // Apply a settings patch object (already sanitized) onto a settings object.
 function applyPatch(settings, parsed) {
   if (!parsed || typeof parsed !== 'object') return;
   const backend = normalizeBackend(parsed.angleBackend);
   if (backend) settings.angleBackend = backend;
+  const discord = normalizeBool(parsed.discordRpcEnabled);
+  if (discord !== null) settings.discordRpcEnabled = discord;
 }
 
 // Load settings; missing/corrupt file → defaults.
@@ -81,7 +95,9 @@ function loadSettings(file) {
       // v1 → v2: 'default' ANGLE backend means "never picked" → D3D9.
       (version < 2 && settings.angleBackend === 'default') ||
       // < v4: drop the removed Streaming Availability fields from the file.
-      version < 4;
+      // < v5: stamp the new discordRpcEnabled default into the file.
+      version < 4 ||
+      version < SETTINGS_VERSION;
 
     if (needsWrite) {
       if (version < 2 && settings.angleBackend === 'default') {
@@ -123,6 +139,6 @@ function saveSettings(file, patch) {
 
 module.exports = {
   ANGLE_BACKENDS, DEFAULTS, SETTINGS_VERSION,
-  normalizeBackend,
+  normalizeBackend, normalizeBool,
   loadSettings, saveSettings
 };

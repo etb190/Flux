@@ -7,7 +7,11 @@ const home = require('./home.js');
 const library = require('./library.js');
 const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
+const { createDiscordService, DISCORD_APP_ID } = require('./discord.js');
 const trailers = require('./trailerserver.js');
+
+// The app-wide Discord Rich Presence connection (main process owns it).
+const discord = createDiscordService({ appId: DISCORD_APP_ID, silent: true });
 
 // ── Squirrel (Windows installer lifecycle) ──────────────────────────────
 // When Flux is installed/updated/uninstalled by Squirrel.Windows it is
@@ -266,7 +270,38 @@ ipcMain.handle('flux:settings:get', () => ({
   backends: ANGLE_BACKENDS
 }));
 
-ipcMain.handle('flux:settings:set', (_event, patch) => saveSettings(settingsFile(), patch));
+ipcMain.handle('flux:settings:set', (_event, patch) => {
+  const before = loadSettings(settingsFile());
+  const saved = saveSettings(settingsFile(), patch);
+  // Live-apply the Discord Rich Presence toggle (Helix setEnabled).
+  if (Boolean(saved.discordRpcEnabled) !== Boolean(before.discordRpcEnabled)) {
+    discord.setEnabled(saved.discordRpcEnabled).catch(() => {});
+  }
+  return saved;
+});
+
+// ── IPC: Discord Rich Presence (Helix DiscordRpcService pattern) ─────────
+// The renderer reports WHAT is playing; the main process owns the single
+// Discord connection. Mirrors Helix's triggers: presence updates on
+// play/pause/duration/seek, and clearToIdle when the player closes.
+ipcMain.handle('flux:discord:set', (_event, payload) => {
+  const p = payload || {};
+  const args = {
+    title: p.title,
+    year: p.year,
+    season: p.season,
+    episode: p.episode,
+    episodeTitle: p.episodeTitle,
+    posterUrl: p.posterUrl,
+    positionSec: p.positionSec,
+    durationSec: p.durationSec,
+    paused: Boolean(p.paused)
+  };
+  if (p.kind === 'series') return discord.setWatchingSeries(args);
+  return discord.setWatchingMovie(args);
+});
+
+ipcMain.handle('flux:discord:idle', () => discord.clearToIdle());
 
 // ── IPC: home page (Cinemeta addon catalogs + TMDB trending) ─────────────
 ipcMain.handle('flux:home', async () => {
@@ -368,6 +403,10 @@ app.whenReady().then(() => {
   if (squirrelStartup) return;   // Squirrel event run — no UI
   installPlayerInterceptors();
   createWindow();
+  // Discord Rich Presence — connect + idle presence when enabled (default).
+  // Silent no-op when Discord isn't running.
+  discord.initialize({ enabled: loadSettings(settingsFile()).discordRpcEnabled })
+    .catch(() => {});
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -375,5 +414,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   trailers.stop();
+  discord.shutdown().catch(() => {});   // clear the presence before quitting
   if (process.platform !== 'darwin') app.quit();
 });
