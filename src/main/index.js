@@ -268,14 +268,12 @@ ipcMain.handle('flux:settings:get', () => ({
 
 ipcMain.handle('flux:settings:set', (_event, patch) => saveSettings(settingsFile(), patch));
 
-// ── IPC: home page (Streaming Availability API + TMDB) ───────────────────
+// ── IPC: home page (Cinemeta addon catalogs + TMDB trending) ─────────────
 ipcMain.handle('flux:home', async () => {
   const s = loadSettings(settingsFile());
   try {
     return await home.getHomeData({
-      saaKey: s.saaApiKey,
       tmdbKey: s.tmdbApiKey,
-      country: s.saaCountry,
       cacheDir: path.join(app.getPath('userData'), 'cache')
     });
   } catch (e) {

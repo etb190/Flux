@@ -2,7 +2,9 @@
  * Rows (top → bottom):
  *   1. "Continue watching"        — local watch history (S/E badge + X)
  *   2. "Because you watched …"    — TMDB recommendations from the Watched list
- *   3. API rows                   — SA top 10s / popular / new + TMDB trending
+ *   3. API rows                   — TMDB trending + Cinemeta addon catalogs
+ *                                   (Popular / New / Featured / Last videos —
+ *                                   Helix AddonManager port, keyless)
  * The hero banner was removed in v0.13.0 (user preference).
  */
 
@@ -307,21 +309,6 @@ function Skeleton() {
   );
 }
 
-function SetupCard() {
-  return (
-    <div data-testid="home-setup" className="flex justify-center py-24 px-6">
-      <div className="max-w-xl bg-raised border border-edge p-8 text-center">
-        <h2 className="text-xl font-semibold mb-3">Home catalog unavailable</h2>
-        <p className="text-dim text-[15px] leading-relaxed">
-          The streaming guide key is missing on this device, so the daily
-          catalogs can&rsquo;t load. Reinstalling Flux restores the built-in
-          key. Search and Continue watching keep working in the meantime.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ErrorCard({ errorMsg, onRetry }) {
   return (
     <div data-testid="home-error" className="flex justify-center py-24 px-6">
@@ -377,8 +364,6 @@ export default function HomeView({ home, onOpen, onResume }) {
     <div className="min-h-full">
       {home.status === 'loading' || home.status === 'idle' ? (
         <Skeleton />
-      ) : home.status === 'setup' ? (
-        <SetupCard />
       ) : home.status === 'error' ? (
         <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />
       ) : (

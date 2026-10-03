@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   saveSettings: (patch) => ipcRenderer.invoke('flux:settings:set', patch),
   relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
   getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
-  // Home page (Streaming Availability API + TMDB: trending, top 10s, new)
+  // Home page (Cinemeta addon catalogs + TMDB trending)
   getHome: () => ipcRenderer.invoke('flux:home'),
   // Watch history ("Continue watching" row)
   historyList: () => ipcRenderer.invoke('flux:history:list'),

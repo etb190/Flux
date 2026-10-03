@@ -25,18 +25,10 @@ const ANGLE_BACKENDS = [
 ];
 
 // D3D9 is the out-of-the-box pick (same as choosing it in the browser flag).
-// saaApiKey:   Streaming Availability API key for the home page (a working
-//              free-tier key ships built in so the home page works out of
-//              the box; users can swap in their own via Settings). Keys
-//              starting with "motn-key-" use the Movie of the Night gateway,
-//              others the RapidAPI one.
-// saaCountry:  2-letter country code for the home page catalogs (us, gb, ...).
 // tmdbApiKey:  TMDB v3 key for the TMDB-powered home rows (trending + the
 //              "Because you watched …" suggestions from the Watched list).
 const DEFAULTS = {
   angleBackend: 'd3d9',
-  saaApiKey: 'motn-key-v4-dy95VsCjpM1RaqoZkgrvJjUYtPw3o598',
-  saaCountry: 'us',
   tmdbApiKey: '19d475b19a2a345b560687918d8ee98b'
 };
 
@@ -45,11 +37,14 @@ const DEFAULTS = {
 // as never-picked and upgraded to the new D3D9 pick; files already at v2
 // keep an explicit 'Default' selection untouched.
 //
-// settingsVersion 3: the Streaming Availability API key is now built in
-// (DEFAULTS above). Files older than v3 that saved an empty saaApiKey are
-// upgraded to the built-in key; v3+ files with an explicitly cleared key
-// (Settings → empty field → Save) keep it empty.
-const SETTINGS_VERSION = 3;
+// settingsVersion 3: the Streaming Availability API key became built-in
+// (historical; the field itself is gone since v4).
+//
+// settingsVersion 4: the Streaming Availability API was removed entirely
+// (free tier quota exhausted). saaApiKey/saaCountry are dropped from the
+// stored file — home rows now come from the Cinemeta addon catalogs, which
+// need no key.
+const SETTINGS_VERSION = 4;
 
 function normalizeBackend(value) {
   const v = String(value || '').toLowerCase().trim();
@@ -61,22 +56,11 @@ function normalizeApiKey(value) {
   return /^[A-Za-z0-9_-]{10,200}$/.test(v) ? v : '';
 }
 
-function normalizeCountry(value) {
-  const v = String(value || '').toLowerCase().trim();
-  return /^[a-z]{2}$/.test(v) ? v : null;
-}
-
 // Apply a settings patch object (already sanitized) onto a settings object.
 function applyPatch(settings, parsed) {
   if (!parsed || typeof parsed !== 'object') return;
   const backend = normalizeBackend(parsed.angleBackend);
   if (backend) settings.angleBackend = backend;
-  if ('saaApiKey' in parsed) {
-    const key = normalizeApiKey(parsed.saaApiKey);
-    settings.saaApiKey = key;
-  }
-  const country = normalizeCountry(parsed.saaCountry);
-  if (country) settings.saaCountry = country;
 }
 
 // Load settings; missing/corrupt file → defaults.
@@ -96,15 +80,12 @@ function loadSettings(file) {
     const needsWrite =
       // v1 → v2: 'default' ANGLE backend means "never picked" → D3D9.
       (version < 2 && settings.angleBackend === 'default') ||
-      // pre-v3 → v3: empty SA key gets the new built-in key.
-      (version < 3 && !settings.saaApiKey);
+      // < v4: drop the removed Streaming Availability fields from the file.
+      version < 4;
 
     if (needsWrite) {
       if (version < 2 && settings.angleBackend === 'default') {
         settings.angleBackend = DEFAULTS.angleBackend;
-      }
-      if (version < 3 && !settings.saaApiKey) {
-        settings.saaApiKey = DEFAULTS.saaApiKey;
       }
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -142,6 +123,6 @@ function saveSettings(file, patch) {
 
 module.exports = {
   ANGLE_BACKENDS, DEFAULTS, SETTINGS_VERSION,
-  normalizeBackend, normalizeApiKey, normalizeCountry,
+  normalizeBackend,
   loadSettings, saveSettings
 };

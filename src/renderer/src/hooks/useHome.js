@@ -1,4 +1,4 @@
-/* ── Home page data (Streaming Availability API + TMDB via main process) ── */
+/* ── Home page data (Cinemeta addon catalogs + TMDB via main process) ──── */
 
 import { useCallback, useRef, useState } from 'react';
 
@@ -7,7 +7,7 @@ function fluxApi() {
 }
 
 export function useHome() {
-  const [status, setStatus] = useState('idle'); // idle|loading|setup|error|ready
+  const [status, setStatus] = useState('idle'); // idle|loading|error|ready
   const [data, setData] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const seqRef = useRef(0);
@@ -21,16 +21,17 @@ export function useHome() {
     try {
       const api = fluxApi();
       if (!api || typeof api.getHome !== 'function') {
-        if (seq === seqRef.current) setStatus('setup');
+        if (seq === seqRef.current) {
+          setErrorMsg('Home data is unavailable in this build.');
+          setStatus('error');
+        }
         loadingRef.current = false;
         return;
       }
       const payload = await api.getHome();
       if (seq !== seqRef.current) return;    // a newer load superseded this one
       loadingRef.current = false;
-      if (!payload || payload.noKey) {
-        setStatus('setup');
-      } else if (payload.error) {
+      if (payload && payload.error) {
         setErrorMsg(String(payload.error));
         setStatus('error');
       } else {
@@ -42,13 +43,13 @@ export function useHome() {
       if (seq !== seqRef.current) return;
       loadingRef.current = false;
       setErrorMsg(
-        'Couldn\u2019t reach the Streaming Availability API. Check your connection and try again.'
+        'Couldn\u2019t reach the addon catalogs. Check your connection and try again.'
       );
       setStatus('error');
     }
   }, []);
 
-  // Settings saved (key/country changed) → next open of home refetches.
+  // Settings saved (backend/country changed) → next open of home refetches.
   const invalidate = useCallback(() => {
     loadedRef.current = false;
   }, []);

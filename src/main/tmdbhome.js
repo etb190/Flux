@@ -44,7 +44,7 @@ function tmdbUrl(endpoint, params, key) {
   return TMDB_BASE + endpoint + '?' + qs.toString();
 }
 
-// ── Disk cache (same pattern as saa.js, separate file) ───────────────────
+// ── Disk cache (same pattern as catalogs.js, separate file) ──────────────
 function cacheFile(dir) { return path.join(dir, 'tmdb-cache.json'); }
 
 function readCache(dir, key) {
