@@ -30,7 +30,7 @@ function ArrowBtn({ dir, disabled, onClick }) {
   );
 }
 
-function CarouselRow({ title, children, testid }) {
+function CarouselRow({ title, children, testid, first }) {
   const scrollerRef = useRef(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -67,9 +67,9 @@ function CarouselRow({ title, children, testid }) {
     Math.max((scrollerRef.current ? scrollerRef.current.clientWidth : 600) * 0.85, 320);
 
   return (
-    <section data-testid={testid || 'home-row'} className="mt-7">
-      <div className="flex items-center justify-between mb-2.5">
-        <h2 className="text-[13.5px] font-semibold tracking-wide text-[#e2e6f0]">{title}</h2>
+    <section data-testid={testid || 'home-row'} className={first ? 'mt-3' : 'mt-6'}>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-[13.5px] font-semibold tracking-wide text-[#ededed]">{title}</h2>
         {noScroll ? null : (
           <div className="flex gap-1.5">
             <ArrowBtn dir="left" disabled={!canLeft}
@@ -95,7 +95,9 @@ function HistoryCard({ entry, onResume, onRemove }) {
     : (left || null);
   return (
     <div className="w-[236px] shrink-0 snap-start">
-      <div className="relative">
+      {/* wrapper carries the group class so the hover X actually reveals
+          (the X is a SIBLING of the card, not a descendant of it) */}
+      <div className="group relative">
         <BackdropCard
           item={{
             id: entry.imdbId, type: entry.type, name: entry.title,
@@ -177,7 +179,7 @@ function useStillEnrichment(items, setItems) {
   }, [items, setItems]);
 }
 
-function ContinueRow({ active, onOpen, onResume }) {
+function ContinueRow({ active, onOpen, onResume, first }) {
   const [items, setItems] = useState([]);
 
   useEffect(() => {
@@ -203,7 +205,7 @@ function ContinueRow({ active, onOpen, onResume }) {
 
   if (!items.length) return null;
   return (
-    <CarouselRow title="Continue Watching" testid="continue-row">
+    <CarouselRow title="Continue Watching" testid="continue-row" first={first}>
       {items.map((entry) => (
         <HistoryCard
           key={entry.imdbId + entry.type}
@@ -305,33 +307,16 @@ function Skeleton() {
   );
 }
 
-function SetupCard({ onOpenSettings }) {
+function SetupCard() {
   return (
     <div data-testid="home-setup" className="flex justify-center py-24 px-6">
-      <div className="max-w-xl bg-raised border border-edge rounded-xl p-8 text-center">
-        <h2 className="text-xl font-semibold mb-3">Set up the home page</h2>
+      <div className="max-w-xl bg-raised border border-edge p-8 text-center">
+        <h2 className="text-xl font-semibold mb-3">Home catalog unavailable</h2>
         <p className="text-dim text-[15px] leading-relaxed">
-          The home page mixes the Streaming Availability API (daily Top&nbsp;10
-          lists, popular titles per service, new &amp; leaving soon) with TMDB
-          trending. Flux ships with a working key, so you only see this if the
-          key was cleared — paste your own (free at{' '}
-          <a
-            className="text-accent hover:underline"
-            href="https://developers.movieofthenight.com"
-            title="Get a free API key"
-          >
-            developers.movieofthenight.com
-          </a>
-          ) in Settings.
+          The streaming guide key is missing on this device, so the daily
+          catalogs can&rsquo;t load. Reinstalling Flux restores the built-in
+          key. Search and Continue watching keep working in the meantime.
         </p>
-        <button
-          data-testid="home-setup-btn"
-          onClick={onOpenSettings}
-          className="mt-6 rounded-lg bg-accent px-5 py-2.5 font-bold text-white hover:bg-[#f6121d] transition-colors"
-        >
-          Open Settings
-        </button>
-        <p className="mt-4 text-sm text-muted">Search keeps working without a key.</p>
       </div>
     </div>
   );
@@ -340,13 +325,13 @@ function SetupCard({ onOpenSettings }) {
 function ErrorCard({ errorMsg, onRetry }) {
   return (
     <div data-testid="home-error" className="flex justify-center py-24 px-6">
-      <div className="max-w-xl bg-raised border border-edge rounded-xl p-8 text-center">
+      <div className="max-w-xl bg-raised border border-edge p-8 text-center">
         <h2 className="text-xl font-semibold mb-3">Couldn&rsquo;t load the home page</h2>
         <p data-testid="home-error-msg" className="text-dim text-[15px]">{errorMsg}</p>
         <button
           data-testid="home-retry"
           onClick={onRetry}
-          className="mt-6 rounded-lg bg-accent px-5 py-2.5 font-bold text-white hover:bg-[#f6121d] transition-colors"
+          className="mt-6 bg-accent px-5 py-2.5 font-bold text-white hover:bg-[#f6121d] transition-colors"
         >
           Retry
         </button>
@@ -360,7 +345,7 @@ function ErrorCard({ errorMsg, onRetry }) {
 function HomeBody({ data, onOpen, active, onResume }) {
   return (
     <div data-testid="home-body">
-      <ContinueRow active={active} onOpen={onOpen} onResume={onResume} />
+      <ContinueRow active={active} onOpen={onOpen} onResume={onResume} first />
       <SuggestionRows active={active} onOpen={onOpen} />
       {data.notice ? (
         <p
@@ -372,7 +357,7 @@ function HomeBody({ data, onOpen, active, onResume }) {
       ) : null}
       {(data.rows || []).map((row, ri) =>
         row.items && row.items.length ? (
-          <CarouselRow key={row.key || ri} title={row.title}>
+          <CarouselRow key={row.key || ri} title={row.title} first={ri === 0 && !(data.rows || []).slice(0, ri).some((r) => r.items && r.items.length) && !data.notice}>
             {row.items.map((item, ii) => (
               <div key={ii} className="w-[236px] shrink-0 snap-start">
                 <BackdropCard item={item} onClick={() => onOpen(item)} />
@@ -392,13 +377,13 @@ function HomeBody({ data, onOpen, active, onResume }) {
 
 // ── HomeView ──────────────────────────────────────────────────────────────
 
-export default function HomeView({ home, onOpen, onOpenSettings, onResume }) {
+export default function HomeView({ home, onOpen, onResume }) {
   return (
     <div className="min-h-full">
       {home.status === 'loading' || home.status === 'idle' ? (
         <Skeleton />
       ) : home.status === 'setup' ? (
-        <SetupCard onOpenSettings={onOpenSettings} />
+        <SetupCard />
       ) : home.status === 'error' ? (
         <ErrorCard errorMsg={home.errorMsg} onRetry={() => home.load(true)} />
       ) : (

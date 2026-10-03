@@ -143,7 +143,7 @@ export default function WatchedView({ onOpen }) {
           placeholder="Search a movie or show to add..."
           autoComplete="off"
           spellCheck={false}
-          className="w-full rounded-lg border border-transparent bg-search py-2.5 pl-9 pr-3.5 text-[13.5px] text-[#c3cad9] outline-none placeholder:text-muted focus:border-[#3a445c]"
+          className="w-full border border-transparent bg-search py-2.5 pl-9 pr-3.5 text-[13.5px] text-[#d4d4d4] outline-none placeholder:text-muted focus:border-[#3d3d3d]"
         />
       </div>
 

@@ -8,7 +8,7 @@ export default function ResultsView({ query, items, onOpen }) {
       <div className="flex items-center gap-3 mb-5">
         <h2
           data-testid="results-title"
-          className="text-[14px] font-bold uppercase tracking-[0.12em] text-[#e2e6f0]"
+          className="text-[14px] font-bold uppercase tracking-[0.12em] text-[#ededed]"
         >
           Results for &ldquo;{query}&rdquo;
         </h2>

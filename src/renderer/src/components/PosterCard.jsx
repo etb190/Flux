@@ -45,7 +45,7 @@ export default function PosterCard({ item, onClick, testid }) {
         <span
           className={
             'absolute top-1.5 right-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ' +
-            (item.type === 'series' ? 'bg-series/80 !text-[#1c2230]' : 'bg-black/70')
+            (item.type === 'series' ? 'bg-series/80 !text-[#1d1d1d]' : 'bg-black/70')
           }
         >
           {item.type === 'series' ? 'Series' : 'Movie'}
@@ -91,7 +91,7 @@ export function BackdropCard({ item, onClick, testid, badge, badgeTestid, progre
             className="absolute inset-0 w-full h-full object-cover"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[12.5px] font-bold uppercase tracking-wide text-[#454e66] bg-gradient-to-br from-[#1f2638] to-[#232c44]">
+          <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[12.5px] font-bold uppercase tracking-wide text-[#4f4f4f] bg-gradient-to-br from-[#1f1f1f] to-[#242424]">
             {item.name}
           </div>
         )}

@@ -1,8 +1,7 @@
 /* ── Sources view — Stitch "Available Streaming Sources & Mirrors" section ─
  * Section header with the red server glyph + operational badge, filter row,
- * and server cards: icon tile, name, format/quality chips, meta line and a
- * red "Stream Now" action. The first direct source gets the recommended
- * red-gradient treatment from the Stitch screen. */
+ * and uniform server cards: icon tile, name, format/quality chips, meta line
+ * and a red "Stream Now" action. No source is singled out as recommended. */
 
 import { useMemo, useState } from 'react';
 import { GB, fmtSize } from '../lib/format.js';
@@ -16,7 +15,7 @@ function hostOf(url) {
   }
 }
 
-function SourceRow({ src, recommended, onPlay }) {
+function SourceRow({ src, onPlay }) {
   const formatClass =
     src.format === 'Embed'
       ? 'bg-series/15 text-series'
@@ -40,22 +39,12 @@ function SourceRow({ src, recommended, onPlay }) {
       data-testid="source-row"
       onClick={() => onPlay(src)}
       className={
-        'group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl border cursor-pointer transition-all duration-200 ' +
-        (recommended
-          ? 'bg-gradient-to-r from-red-950/30 via-[#161a26] to-[#161a26] border-red-500/30 hover:border-red-500/60'
-          : 'bg-[#14161f] hover:bg-[#191d2c] border-white/5 hover:border-white/15') +
+        'group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-200 ' +
         (src.format === 'Embed' ? ' opacity-90' : '')
       }
     >
       <div className="flex items-center gap-4 min-w-0">
-        <div
-          className={
-            'w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ' +
-            (recommended
-              ? 'bg-accent/20 text-accent'
-              : 'bg-[#1c2233] text-[#8b94a9]')
-          }
-        >
+        <div className="w-11 h-11 flex items-center justify-center shrink-0 bg-[#232323] text-[#9b9b9b]">
           {tile}
         </div>
         <div className="min-w-0">
@@ -63,23 +52,18 @@ function SourceRow({ src, recommended, onPlay }) {
             <span className="text-sm font-bold text-white truncate max-w-full">
               {src.title || src.provider || 'Source'}
             </span>
-            {recommended ? (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-accent text-white uppercase tracking-wider">
-                Recommended
-              </span>
-            ) : null}
-            <span className={'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ' + formatClass}>
+            <span className={'px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ' + formatClass}>
               {src.format || 'LINK'}
             </span>
             {src.quality ? (
-              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/20">
                 {src.quality}
               </span>
             ) : null}
           </div>
-          <div className="flex items-center gap-2 text-xs text-[#677189] mt-1.5 flex-wrap">
+          <div className="flex items-center gap-2 text-xs text-[#6f6f6f] mt-1.5 flex-wrap">
             {src.description ? (
-              <span className="text-[#aab2c5] font-medium">{src.description}</span>
+              <span className="text-[#b8b8b8] font-medium">{src.description}</span>
             ) : null}
             {host ? (
               <>
@@ -99,7 +83,7 @@ function SourceRow({ src, recommended, onPlay }) {
       <button
         data-testid="source-play"
         title="Play this source"
-        className="px-4 sm:px-5 py-2.5 rounded-lg bg-accent hover:bg-red-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm shadow-red-600/20 shrink-0 self-start sm:self-auto"
+        className="px-4 sm:px-5 py-2.5 bg-accent hover:bg-red-700 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors shrink-0 self-start sm:self-auto"
       >
         <PlayIcon size={15} />
         Stream Now
@@ -171,7 +155,7 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
             <span className="text-accent shrink-0"><DnsIcon size={20} /></span>
             <span className="truncate">Available Streaming Sources &amp; Mirrors</span>
           </h2>
-          <p data-testid="sources-sub" className="text-xs text-[#8b94a9] mt-0.5 truncate">
+          <p data-testid="sources-sub" className="text-xs text-[#9b9b9b] mt-0.5 truncate">
             {title} &mdash; {meta.name} &middot; pick a node for the best playback quality
           </p>
         </div>
@@ -200,7 +184,7 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
             autoComplete="off"
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-lg bg-search border border-edge pl-8 pr-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-[#3a445c]"
+            className="w-full bg-search border border-edge pl-8 pr-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-[#3d3d3d]"
           />
         </div>
         <select
@@ -239,7 +223,6 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
           <SourceRow
             key={src.url + i}
             src={src}
-            recommended={i === 0 && src.format !== 'Embed' && !showNomatch}
             onPlay={onPlay}
           />
         ))}

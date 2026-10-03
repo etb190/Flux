@@ -4,38 +4,38 @@ A lightweight streaming app for Windows, built with **Electron + React + Vite** 
 
 Flux uses the same metadata source as [Helix](https://github.com/etb190/Helix) (the Stremio Cinemeta addon) to search movies & series, and a home page filled by the Streaming Availability API (daily Top 10s, popular per service, new & leaving soon) mixed with TMDB trending.
 
-## Status (v0.16.0)
+## Status (v0.17.0)
 
-- [x] Stitch design system ("Netflix Dashboard Homepage" generation): Inter font,
-      navy stack (#11141e sidebar / #141824 main / #1a1f2e cards), red #E50914
-      accent, persistent left sidebar (Home / Watched), topbar search
+- [x] Light-black dark mode: neutral gray stack (no blue tint) — #121212 main,
+      #0d0d0d sidebar, #1a1a1a cards, red #E50914 accent, Inter font
 - [x] Home page: square-cornered 16:9 backdrop cards with a tiny 3px gap,
-      arrow-paged carousels (no scrollbar), no hero banner
-- [x] One-layer details flow: the app top bar disappears on movie/TV screens —
-      back circle, breadcrumb (Movies | Genre | Title), search and settings live
-      INSIDE the content layer, exactly like the Stitch detail screens
+      arrow-paged carousels, square + wide topbar search, tight spacing under
+      the search bar, no hero banner
+- [x] One-layer details flow: back circle, breadcrumb (Movies | Genre | Title)
+      and search live INSIDE the content layer; no settings gear anywhere
+- [x] Details hero: full-bleed art, match pill, IMDb chip, red-gradient series
+      title, Play / **Trailer** (YouTube) / add-to-Watched actions — the hero
+      stays above the storyline on every page length
+- [x] Episodes rebuilt: season pill buttons in one scrollable line (arrows when
+      they overflow) and episode CARDS in one scrollable line — banner, red
+      "EP n", bold white title, light-gray description, uniform card sizes
+- [x] Sources view: uniform server cards (no "recommended" highlighting),
+      format/quality chips, operational badge, Stream Now actions
+- [x] Trailers on movie & TV screens: Cinemeta trailer → YouTube embed in the
+      player layer; never recorded in Continue watching; Back returns to details
 - [x] Continue Watching: first row, S/E + time-left badge, red progress bar,
-      click resumes the SAME source at the saved timestamp, hover x dismisses
-      (persisted); episode/movie stills as card art
-- [x] Watched page: search + add movies/shows; "Because you watched …" rows on
-      the home page from TMDB /movie|tv/{id}/recommendations
-- [x] Details page (Stitch movie/TV detail screens): full-bleed hero with match
-      pill + IMDb chip, red-gradient series title, storyline + info card,
-      season dropdown + episode rows with stills
-- [x] Sources view (Stitch "Available Streaming Sources & Mirrors"): server
-      cards with icon tiles, format/quality chips, recommended highlight and
-      Stream Now actions
-- [x] Search bar (debounced as-you-type + Enter)
-- [x] Source scanning (multi-provider, live progress, text + size filters)
-- [x] Player: **Artplayer** engine (open source) + hls.js for HLS, MP4 direct
-      playback, embed webviews, header injection + CORS passthrough, playback
-      position saved every few seconds, speed/aspect/flip/PiP/hotkeys built in
-- [x] Helix subtitle system kept (SRT/VTT/ASS, en/fr/it/es/ar whitelist,
-      embedded tracks) + subtitle settings (size, background, delay) in the
-      player settings panel
-- [x] Settings: ANGLE graphics backend (D3D9 default), Streaming Availability
-      key + country, TMDB key
-- [x] Squirrel.Windows installer lifecycle (install/update/uninstall events)
+      same-source resume from the saved timestamp, hover x dismiss (persisted)
+- [x] Player: **Artplayer** engine + hls.js — CC (subtitles) and fullscreen
+      buttons sized like the built-ins and pinned at the FAR RIGHT of the
+      control bar; CC opens the Flux subtitle menu (real mouse clicks included)
+- [x] CSP fix: inline styles + Artplayer's runtime stylesheet now apply
+      (previously blocked — subtitle size/background settings were no-ops)
+- [x] Helix subtitle system kept (SRT/VTT/ASS, embedded tracks) + subtitle
+      settings (size, background, delay) in the player settings panel
+- [x] cursor:pointer on every clickable element
+- [x] Sidebar Home/Watched jump straight to their views from anywhere
+- [x] Search (debounced), multi-provider source scanning, Squirrel.Windows
+      installer lifecycle
 
 ## Project structure
 

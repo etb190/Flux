@@ -1,7 +1,7 @@
 /* ── Flux app shell: view machine + orchestration ────────────────────────
  * Views: home | loading | error | empty | results | details-loading |
- *        details-error | details | sources        (+ player & settings overlays)
- * Esc chain (Helix pattern): settings → subtitle menu → player → sources →
+ *        details-error | details | sources        (+ player overlay)
+ * Esc chain (Helix pattern): subtitle menu → player → sources →
  * details → clear search back to home.
  */
 
@@ -15,7 +15,6 @@ import DetailsView from './components/DetailsView.jsx';
 import DetailTopBar from './components/DetailTopBar.jsx';
 import SourcesView from './components/SourcesView.jsx';
 import PlayerView from './components/PlayerView.jsx';
-import SettingsModal from './components/SettingsModal.jsx';
 import { LoadingPane, ErrorPane, EmptyPane } from './components/ui.jsx';
 import { useHome } from './hooks/useHome.js';
 import { useSearch } from './hooks/useSearch.js';
@@ -29,7 +28,6 @@ export default function App() {
   const [meta, setMeta] = useState(null);
   const [episode, setEpisode] = useState(null);
   const [activeSource, setActiveSource] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [homeTab, setHomeTab] = useState('feed');   // home sidebar: feed|watched
 
@@ -48,12 +46,10 @@ export default function App() {
 
   // mirrors for the stable Esc handler
   const viewRef = useRef(view);
-  const settingsOpenRef = useRef(settingsOpen);
   const activeSourceRef = useRef(activeSource);
   const submenuOpenRef = useRef(submenuOpen);
   const homeTabRef = useRef(homeTab);
   useEffect(() => { viewRef.current = view; }, [view]);
-  useEffect(() => { settingsOpenRef.current = settingsOpen; }, [settingsOpen]);
   useEffect(() => { activeSourceRef.current = activeSource; }, [activeSource]);
   useEffect(() => { submenuOpenRef.current = submenuOpen; }, [submenuOpen]);
   useEffect(() => { homeTabRef.current = homeTab; }, [homeTab]);
@@ -113,6 +109,15 @@ export default function App() {
   const goHome = useCallback(() => {
     setView('home');
   }, []);
+
+  // ── sidebar navigation: Home / Watched jump straight to their view ────
+  const handleSideTab = useCallback((id) => {
+    detailsSeqRef.current++;               // invalidate in-flight detail loads
+    streams.stopScan();
+    setHomeTab(id);
+    setView('home');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streams]);
 
   const handleQueryChange = useCallback((q) => {
     setQuery(q);
@@ -233,6 +238,24 @@ export default function App() {
     }
   }, [meta, episode]);
 
+  // ── trailer playback (YouTube embed via the player's webview path) ────
+  // Trailer sessions never touch the watch history.
+  const openTrailer = useCallback((ytId) => {
+    if (!ytId) return;
+    detailsSeqRef.current++;
+    streams.stopScan();
+    resumeEntryRef.current = null;
+    setResumeSec(0);
+    setActiveSource({
+      url: 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&rel=0',
+      format: 'Embed',
+      provider: 'YouTube',
+      title: 'Official Trailer',
+      trailer: true
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streams]);
+
   // ── resume from the Continue watching row ─────────────────────────────
   // Same source you were on, starting where you left off. Entries without a
   // stored direct source (embeds / legacy) fall back to the details view.
@@ -286,7 +309,13 @@ export default function App() {
 
   const closePlayer = useCallback(() => {
     setSubmenuOpen(false);
+    const src = activeSourceRef.current;
     setActiveSource(null);
+    // Trailer session → straight back to the details screen
+    if (src && src.trailer) {
+      setView('details');
+      return;
+    }
     // Resumed playback backed by meta + episode → back opens the source
     // list for this title (fresh scan) instead of dropping to home
     const entry = resumeEntryRef.current;
@@ -301,10 +330,6 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
-      if (settingsOpenRef.current) {
-        setSettingsOpen(false);              // Esc in settings → close dialog
-        return;
-      }
       if (activeSourceRef.current) {
         if (submenuOpenRef.current) {
           setSubmenuOpen(false);             // Esc in subtitle menu → close it
@@ -335,13 +360,6 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey);
   }, [closePlayer, closeSources, closeDetails, goHome]);
 
-  // ── settings saved → home refetches with the new key/country ──────────
-  const handleSettingsSaved = useCallback(() => {
-    home.invalidate();
-    home.load(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home]);
-
   const inDetailsFlow = view === 'details-loading' || view === 'details-error' ||
     view === 'details' || view === 'sources';
 
@@ -365,7 +383,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-ink font-sans">
-      <SideBar active={homeTab} onTab={setHomeTab} />
+      <SideBar active={homeTab} onTab={handleSideTab} />
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* The app top bar lives ONLY on non-details views — the movie/TV
@@ -376,7 +394,6 @@ export default function App() {
             onQueryChange={handleQueryChange}
             onEnter={handleQueryEnter}
             onClear={handleQueryClear}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
         ) : null}
 
@@ -384,7 +401,7 @@ export default function App() {
           ref={contentRef}
           className={
             'flex-1 overflow-y-auto scroll-dark relative ' +
-            (inDetailsFlow ? 'flex flex-col p-0' : 'px-8 pt-4 pb-2')
+            (inDetailsFlow ? 'flex flex-col p-0' : 'px-8 pt-3 pb-2')
           }
         >
           {view === 'home' ? (
@@ -394,7 +411,6 @@ export default function App() {
               <HomeView
                 home={home}
                 onOpen={(item) => openDetails(item, 'home')}
-                onOpenSettings={() => setSettingsOpen(true)}
                 onResume={resumeHistory}
               />
             )
@@ -417,16 +433,18 @@ export default function App() {
           ) : null}
 
           {inDetailsFlow ? (
-            <section data-testid="details" className="flex flex-col min-h-full">
-              {/* One layer: back / breadcrumb / search / settings are part of
-                  the content layer (Stitch detail screens), not app chrome. */}
+            <section
+              data-testid="details"
+              className="detail-page flex flex-col min-h-full"
+            >
+              {/* One layer: back / breadcrumb / search are part of the
+                  content layer (Stitch detail screens), not app chrome. */}
               <DetailTopBar
                 crumbs={detailCrumbs}
                 query={query}
                 onQueryChange={handleQueryChange}
                 onEnter={handleQueryEnter}
                 onClear={handleQueryClear}
-                onOpenSettings={() => setSettingsOpen(true)}
                 onBack={() => {
                   if (view === 'sources') closeSources();
                   else closeDetails();
@@ -446,7 +464,11 @@ export default function App() {
               ) : null}
 
               {view === 'details' && meta ? (
-                <DetailsView meta={meta} onFindSources={openSources} />
+                <DetailsView
+                  meta={meta}
+                  onFindSources={openSources}
+                  onPlayTrailer={openTrailer}
+                />
               ) : null}
 
               {view === 'sources' && meta && episode ? (
@@ -456,12 +478,6 @@ export default function App() {
           ) : null}
         </main>
       </div>
-
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onSaved={handleSettingsSaved}
-      />
 
       {activeSource ? (
         <PlayerView

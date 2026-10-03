@@ -1,11 +1,19 @@
 /* ── Details page — Stitch "Netflix Movie Details Page" + "Netflix TV Show
- * Details & Episodes" screens (darker cinematic surface, split hero,
- * storyline + info card, season dropdown + episode rows) ──────────────── */
+ * Details & Episodes" screens (darker cinematic surface, full-bleed hero
+ * with play + trailer actions, storyline + info card, season pill buttons
+ * and episode cards in horizontal scroller rows with edge arrows) ────────
+ *
+ * LAYOUT NOTE: this view is plain BLOCK flow on purpose. The previous
+ * flex-1/min-h-full chain let the overflow-hidden hero shrink to 0px on
+ * long pages, which pushed the storyline visually above the hero — fixed
+ * by keeping the page in normal document flow inside the scrollable main.
+ */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildSeasonTabs, formatAirDate, fmtLeft } from '../lib/format.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { buildSeasonTabs, fmtLeft } from '../lib/format.js';
 import {
-  PlayIcon, PlusIcon, CheckIcon, ThumbUpIcon, ChevronDownIcon
+  PlayIcon, PlusIcon, CheckIcon, ThumbUpIcon,
+  ChevronLeftIcon, ChevronRightIcon
 } from './icons.jsx';
 
 /* Netflix-style match percentage: IMDb 8.7 → 87% */
@@ -14,9 +22,75 @@ function matchPct(rating) {
   return Number.isFinite(n) && n > 0 && n <= 10 ? Math.round(n * 10) : null;
 }
 
+/* ── Horizontal scroller row with edge arrows (seasons / episodes) ──────── */
+
+function HScroller({ children, testid, scrollerTestid }) {
+  const scrollerRef = useRef(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const sync = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft < max - 4);
+  }, []);
+
+  useEffect(() => {
+    sync();
+    const el = scrollerRef.current;
+    if (!el) return undefined;
+    el.addEventListener('scroll', sync, { passive: true });
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    const t1 = setTimeout(sync, 600);
+    const t2 = setTimeout(sync, 2000);
+    return () => {
+      el.removeEventListener('scroll', sync);
+      ro.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [sync, children]);
+
+  const page = () =>
+    Math.max((scrollerRef.current ? scrollerRef.current.clientWidth : 600) * 0.8, 280);
+
+  return (
+    <div data-testid={testid} className="relative">
+      <div
+        ref={scrollerRef}
+        data-testid={scrollerTestid}
+        className="epi-scroll flex gap-[3px] overflow-x-auto py-1 px-8 -mx-8"
+      >
+        {children}
+      </div>
+      <button
+        data-testid={testid + '-arrow-left'}
+        aria-label="Scroll left"
+        disabled={!canLeft}
+        onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })}
+        className="epi-arrow epi-arrow-left"
+      >
+        <ChevronLeftIcon size={20} />
+      </button>
+      <button
+        data-testid={testid + '-arrow-right'}
+        aria-label="Scroll right"
+        disabled={!canRight}
+        onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })}
+        className="epi-arrow epi-arrow-right"
+      >
+        <ChevronRightIcon size={20} />
+      </button>
+    </div>
+  );
+}
+
 /* ── Hero: full-bleed backdrop + tag pills + huge title + meta + play ───── */
 
-function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
+function Hero({ meta, onPlayPrimary, onPlayTrailer, onToggleWatched, inWatched, resume }) {
   const isSeries = meta.type === 'series';
   const pct = matchPct(meta.imdbRating);
 
@@ -32,7 +106,7 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
   return (
     <section
       data-testid="details-hero"
-      className="relative w-full overflow-hidden bg-[#0c0e14]"
+      className="relative w-full overflow-hidden bg-[#0a0a0a]"
     >
       {/* Backdrop art */}
       <div className="absolute inset-0 overflow-hidden">
@@ -47,15 +121,15 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
         ) : null}
       </div>
       {/* Cinematic scrims (to-t / to-r) + red bleed, per the Stitch screens */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0f1117] via-[#0f1117]/60 to-transparent" />
-      <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0f1117] via-[#0f1117]/85 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
+      <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/85 to-transparent" />
       <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 rounded-full blur-3xl pointer-events-none" />
 
       {/* Content */}
       <div className="relative z-10 px-8 pt-14 pb-9 max-w-4xl">
         {/* Tag pill row */}
         <div className="flex items-center gap-2.5 mb-3 flex-wrap">
-          <span className="text-accent font-black tracking-widest text-[11px] uppercase bg-black/40 px-2 py-0.5 rounded shadow-sm">
+          <span className="text-accent font-black tracking-widest text-[11px] uppercase bg-black/40 px-2 py-0.5 shadow-sm">
             F <span className="text-gray-300 font-semibold tracking-wider ml-1">
               {isSeries ? 'Series' : 'Movie'}
             </span>
@@ -63,7 +137,7 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
           {pct != null ? (
             <span
               data-testid="details-match"
-              className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded"
+              className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5"
             >
               <ThumbUpIcon size={13} /> {pct}% Match
             </span>
@@ -101,8 +175,8 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
             </>
           ) : null}
           {meta.imdbRating && meta.imdbRating !== 'null' ? (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-wider bg-slate-800/80 text-amber-300 rounded flex items-center gap-1">
-              <span className="text-black font-black bg-amber-400 px-1 rounded text-[9px]">IMDb</span>
+            <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-wider bg-neutral-800/80 text-amber-300 flex items-center gap-1">
+              <span className="text-black font-black bg-amber-400 px-1 text-[9px]">IMDb</span>
               {meta.imdbRating}
             </span>
           ) : null}
@@ -120,7 +194,7 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
           <button
             data-testid="find-sources"
             onClick={onPlayPrimary}
-            className="flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-red-700 text-white font-bold rounded-lg shadow-xl shadow-red-950/40 transition-transform active:scale-95"
+            className="flex items-center gap-2 px-6 py-2.5 bg-accent hover:bg-red-700 text-white font-bold shadow-xl shadow-red-950/40 transition-transform active:scale-95"
           >
             <PlayIcon size={20} />
             <span className="text-sm">
@@ -129,13 +203,24 @@ function Hero({ meta, onPlayPrimary, onToggleWatched, inWatched, resume }) {
                 : isSeries ? 'Play S1:E1' : 'Play Movie'}
             </span>
           </button>
+          {meta.trailer ? (
+            <button
+              data-testid="details-trailer"
+              title="Watch the trailer"
+              onClick={() => onPlayTrailer(meta.trailer)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold transition-colors"
+            >
+              <PlayIcon size={16} />
+              <span className="text-sm">Trailer</span>
+            </button>
+          ) : null}
           <button
             data-testid="details-add-watched"
             title={inWatched ? 'In your Watched list' : 'Add to Watched list'}
             aria-label={inWatched ? 'In your Watched list' : 'Add to Watched list'}
             onClick={onToggleWatched}
             className={
-              'w-10 h-10 flex items-center justify-center rounded-full border transition-colors ' +
+              'w-10 h-10 flex items-center justify-center border transition-colors ' +
               (inWatched
                 ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/10')
@@ -170,7 +255,7 @@ function Overview({ meta }) {
       <div className="lg:col-span-2 space-y-4 min-w-0">
         <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
           {isSeries ? (
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+            <span className="w-1.5 h-1.5 bg-accent" />
           ) : null}
           {isSeries ? 'Series Overview' : 'Storyline'}
         </h2>
@@ -190,7 +275,7 @@ function Overview({ meta }) {
             {(meta.genres || []).slice(0, 5).map((g) => (
               <span
                 key={g}
-                className="px-2.5 py-1 text-xs font-medium text-gray-300 bg-[#1c1f2c] rounded-full"
+                className="px-2.5 py-1 text-xs font-medium text-gray-300 bg-[#212121]"
               >
                 {g}
               </span>
@@ -200,7 +285,7 @@ function Overview({ meta }) {
           <div className="flex flex-wrap items-center gap-5 text-xs text-gray-400 pt-2">
             {facts.map((g) => (
               <span key={g} className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                <span className="w-1.5 h-1.5 bg-accent shrink-0" />
                 {g}
               </span>
             ))}
@@ -208,7 +293,7 @@ function Overview({ meta }) {
         ) : null}
       </div>
 
-      <div className="space-y-3 text-xs bg-[#14161f] p-5 rounded-xl border border-white/5">
+      <div className="space-y-3 text-xs bg-[#161616] p-5 border border-white/5">
         {rows.map(([label, value]) => (
           <div key={label}>
             <span className="text-gray-500 block mb-0.5">{label}</span>
@@ -222,77 +307,52 @@ function Overview({ meta }) {
   );
 }
 
-/* ── Episodes (season dropdown + sort + rows per the Stitch TV screen) ──── */
+/* ── Episodes: season pill row + episode card row (both scrollable) ─────── */
 
-function EpisodeThumb({ src, alt, fallback }) {
+function EpisodeCard({ ep, onOpen }) {
   const [imgOk, setImgOk] = useState(true);
-  const showImg = Boolean(src) && imgOk;
-  return (
-    <div className="relative w-full md:w-52 aspect-video md:h-28 shrink-0 overflow-hidden rounded-lg bg-slate-900">
-      {showImg ? (
-        <img
-          src={src}
-          alt={alt}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setImgOk(false)}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-xl text-dim font-semibold">
-          {fallback || '\uD83C\uDFAC'}
-        </div>
-      )}
-      <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full bg-black/70 flex items-center justify-center text-white group-hover:bg-accent group-hover:scale-110 transition-all shadow-lg">
-          <PlayIcon size={20} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EpisodeRow({ ep, index, onOpen }) {
+  const showImg = Boolean(ep.thumbnail) && imgOk;
   return (
     <div
-      data-testid="episode-row"
-      title="Find sources for this episode"
+      data-testid="episode-card"
+      title={'Find sources for EP ' + (ep.episode ?? '')}
       onClick={() => onOpen(ep)}
-      className="group detail-card p-4 rounded-xl transition-all duration-200 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-sm hover:shadow-md cursor-pointer"
+      className="group w-[200px] shrink-0 snap-start bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-colors duration-150"
     >
-      <span className="text-lg md:text-xl font-black text-gray-500 w-6 text-center group-hover:text-accent transition-colors shrink-0">
-        {index}
-      </span>
-      <EpisodeThumb
-        src={ep.thumbnail}
-        alt={ep.title}
-        fallback={ep.episode != null ? String(ep.episode) : null}
-      />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          <h3 className="text-sm font-bold text-white group-hover:text-red-400 transition-colors truncate">
-            {ep.title}
-          </h3>
-        </div>
-        {ep.overview ? (
-          <p title={ep.overview} className="text-xs text-gray-400 leading-relaxed line-clamp-2 mb-2">
-            {ep.overview}
-          </p>
-        ) : null}
-        <div className="flex items-center gap-3 text-[11px] text-gray-500 font-medium">
-          {ep.season != null && ep.episode != null ? (
-            <span className="text-gray-400 font-semibold">S{ep.season} E{ep.episode}</span>
-          ) : null}
-          {formatAirDate(ep.released) ? (
-            <>
-              <span>&bull;</span>
-              <span>Air date: {formatAirDate(ep.released)}</span>
-            </>
-          ) : null}
+      {/* Banner — 16:9, fills the card width, identical on every card */}
+      <div className="relative w-full aspect-video overflow-hidden bg-[#1d1d1d]">
+        {showImg ? (
+          <img
+            src={ep.thumbnail}
+            alt={ep.title}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setImgOk(false)}
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-300"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1f1f1f] to-[#242424] text-xl font-black text-[#4a4a4a]">
+            {ep.episode != null ? ep.episode : '\u25B6'}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-black/25 group-hover:bg-black/5 transition-colors flex items-center justify-center">
+          <span className="w-9 h-9 flex items-center justify-center bg-black/70 text-white group-hover:bg-accent transition-colors opacity-90 group-hover:opacity-100">
+            <PlayIcon size={18} />
+          </span>
         </div>
       </div>
-      <div className="flex items-center pr-2 text-gray-500 group-hover:text-white transition-colors">
-        <PlayIcon size={20} />
+
+      {/* Text block — FIXED heights so every card is exactly as tall */}
+      <div className="px-2.5 pt-2 pb-2.5">
+        <div className="h-[14px] text-[11px] font-bold uppercase tracking-wider text-accent leading-[14px]">
+          EP {ep.episode ?? '?'}
+        </div>
+        <div className="h-[18px] mt-0.5 text-[13px] font-bold text-white leading-[18px] truncate">
+          {ep.title || 'Episode'}
+        </div>
+        <div className="h-[30px] mt-1 text-[11px] leading-[15px] text-[#9e9e9e] overflow-hidden">
+          <span className="line-clamp-2">{ep.overview || ''}</span>
+        </div>
       </div>
     </div>
   );
@@ -301,91 +361,53 @@ function EpisodeRow({ ep, index, onOpen }) {
 function Episodes({ meta, onFindSources }) {
   const seasonTabs = useMemo(() => buildSeasonTabs(meta.videos || []), [meta]);
   const [currentTab, setCurrentTab] = useState(0);
-  const [reverse, setReverse] = useState(false);
 
   const tab = seasonTabs[currentTab] || seasonTabs[0];
-  const episodes = useMemo(() => {
-    if (!tab) return [];
-    return reverse ? [...tab.episodes].reverse() : tab.episodes;
-  }, [tab, reverse]);
+
+  // Reset to the first season whenever a new series mounts
+  useEffect(() => { setCurrentTab(0); }, [meta]);
 
   if (!seasonTabs.length) {
     return (
-      <div className="mt-8 rounded-xl bg-[#14161f] border border-white/5 px-5 py-4 text-gray-400">
+      <div className="bg-[#161616] border border-white/5 px-5 py-4 text-gray-400">
         No episode data available for this series yet.
       </div>
     );
   }
 
   return (
-    <section data-testid="details-episodes" className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold text-white tracking-wide">Episodes</h2>
-          <div className="relative">
-            <select
-              data-testid="season-select"
-              value={currentTab}
-              onChange={(e) => setCurrentTab(Number(e.target.value))}
-              className="detail-select pr-9"
-            >
-              {seasonTabs.map((t, idx) => (
-                <option key={idx} value={idx}>
-                  {t.label} ({t.episodes.length} Episode{t.episodes.length > 1 ? 's' : ''})
-                </option>
-              ))}
-            </select>
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-              <ChevronDownIcon size={15} />
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <span className="text-gray-500">Sort:</span>
-          <button
-            data-testid="sort-original"
-            onClick={() => setReverse(false)}
-            className={
-              'px-2.5 py-1 rounded transition-colors ' +
-              (!reverse
-                ? 'bg-[#161922] text-white font-medium'
-                : 'hover:bg-slate-800/70 text-gray-400 hover:text-white')
-            }
-          >
-            Original
-          </button>
-          <button
-            data-testid="sort-reverse"
-            onClick={() => setReverse(true)}
-            className={
-              'px-2.5 py-1 rounded transition-colors ' +
-              (reverse
-                ? 'bg-[#161922] text-white font-medium'
-                : 'hover:bg-slate-800/70 text-gray-400 hover:text-white')
-            }
-          >
-            Reverse
-          </button>
-        </div>
-      </div>
+    <section data-testid="details-episodes" className="flex flex-col gap-4">
+      <h2 className="text-xl font-bold text-white tracking-wide">Episodes</h2>
 
-      <div data-testid="episodes-list" className="space-y-3">
-        {episodes.map((ep, i) => (
-          <EpisodeRow
-            key={ep.id + i}
-            ep={ep}
-            index={reverse ? episodes.length - i : i + 1}
-            onOpen={onFindSources}
-          />
+      {/* Season buttons — one line, scrollable with edge arrows */}
+      <HScroller testid="season-row" scrollerTestid="season-scroll">
+        {seasonTabs.map((t, idx) => (
+          <button
+            key={t.label + idx}
+            data-testid="season-pill"
+            data-season={t.label}
+            onClick={() => setCurrentTab(idx)}
+            className={'season-pill' + (idx === currentTab ? ' active' : '')}
+          >
+            {t.label}
+          </button>
         ))}
-      </div>
+      </HScroller>
+
+      {/* Episode cards — one line, scrollable with edge arrows. The row is
+          keyed by season so switching seasons snaps back to the start. */}
+      <HScroller key={currentTab} testid="episodes-row" scrollerTestid="episodes-scroll">
+        {tab.episodes.map((ep, i) => (
+          <EpisodeCard key={ep.id + i} ep={ep} onOpen={onFindSources} />
+        ))}
+      </HScroller>
     </section>
   );
 }
 
-/* ── DetailsView ─────────────────────────────────────────────────────────── */
+/* ── DetailsView ─────────────────────────────────────────────────────── */
 
-export default function DetailsView({ meta, onFindSources }) {
+export default function DetailsView({ meta, onFindSources, onPlayTrailer }) {
   const isSeries = meta.type === 'series';
   const [inWatched, setInWatched] = useState(false);
   const [resume, setResume] = useState(null);   // "S2 E5 · 28m left" | "42m left"
@@ -454,13 +476,14 @@ export default function DetailsView({ meta, onFindSources }) {
   };
 
   return (
-    <div data-testid="details-content" className="detail-page flex-1 flex flex-col pb-12 min-h-full">
+    <div data-testid="details-content" className="pb-12">
       <Hero
         meta={meta}
         resume={resume}
         inWatched={inWatched}
         onToggleWatched={toggleWatched}
         onPlayPrimary={playPrimary}
+        onPlayTrailer={onPlayTrailer}
       />
 
       <div className="px-8 py-8 space-y-9">

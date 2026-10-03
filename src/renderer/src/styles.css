@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* ── Flux theme — Stitch design system ───────────────────────────────────
-   Palette ported from the Stitch "Netflix Dashboard Homepage" generation:
-   Inter font, dark navy stack, red accent, 16:9 backdrop cards with
-   uppercase title overlays, persistent left sidebar, topbar search. */
+   Inter font, LIGHT-BLACK dark-mode stack (neutral grays, no blue tint),
+   red accent, 16:9 backdrop cards with uppercase title overlays,
+   persistent left sidebar, topbar search. */
 
 @font-face {
   font-family: "Inter";
@@ -29,21 +29,33 @@
 
 @theme {
   /* Stitch tokens (semantic names kept from the vanilla UI) */
-  --color-bg: #141824;        /* main content background */
-  --color-rail: #11141e;      /* sidebar background */
-  --color-raised: #1a1f2e;    /* panels / cards / rows */
-  --color-inner: #1f2638;     /* card placeholder inner */
-  --color-search: #1b2030;    /* search + input fields */
-  --color-hover: #232a3d;     /* hover surfaces */
-  --color-edge: #232a3d;      /* borders */
-  --color-ink: #f0f3f9;       /* primary text */
-  --color-dim: #8b94a9;       /* secondary text */
-  --color-muted: #677189;     /* faint text / hints */
+  --color-bg: #121212;        /* main content background (light black) */
+  --color-rail: #0d0d0d;      /* sidebar background */
+  --color-raised: #1a1a1a;    /* panels / cards / rows */
+  --color-inner: #202020;     /* card placeholder inner */
+  --color-search: #1c1c1c;    /* search + input fields */
+  --color-hover: #262626;     /* hover surfaces */
+  --color-edge: #2a2a2a;      /* borders */
+  --color-ink: #f2f2f2;       /* primary text */
+  --color-dim: #9b9b9b;       /* secondary text */
+  --color-muted: #6f6f6f;     /* faint text / hints */
   --color-accent: #e50914;    /* Flux red (Stitch netflixRed) */
   --color-gold: #f5c518;      /* rating */
-  --color-movie: #677189;     /* type badge (neutral slate in Stitch style) */
-  --color-series: #c3cad9;    /* type badge */
+  --color-movie: #8a8a8a;     /* type badge (neutral gray) */
+  --color-series: #d4d4d4;    /* type badge */
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* Every clickable thing gets the pointer (Tailwind 4 preflight resets
+   buttons to cursor:default — put it back, plus the rest) */
+button:not(:disabled),
+[role="button"],
+[role="option"],
+select,
+a,
+summary,
+.cursor-pointer {
+  cursor: pointer;
 }
 
 html,
@@ -68,21 +80,21 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Dark scrollbars (Stitch spec: 6px, thumb #252b3d) */
+/* Dark scrollbars (6px, neutral thumb) */
 .scroll-dark {
   scrollbar-width: thin;
-  scrollbar-color: #252b3d transparent;
+  scrollbar-color: #2e2e2e transparent;
 }
 .scroll-dark::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 .scroll-dark::-webkit-scrollbar-thumb {
-  background: #252b3d;
+  background: #2e2e2e;
   border-radius: 4px;
 }
 .scroll-dark::-webkit-scrollbar-thumb:hover {
-  background: #363e56;
+  background: #3f3f3f;
 }
 .scroll-dark::-webkit-scrollbar-track {
   background: transparent;
@@ -101,7 +113,7 @@ body {
   }
 }
 .skeleton {
-  background: linear-gradient(90deg, #1a1f2e 25%, #232b40 50%, #1a1f2e 75%);
+  background: linear-gradient(90deg, #1a1a1a 25%, #242424 50%, #1a1a1a 75%);
   background-size: 800px 100%;
   animation: flux-shimmer 1.4s infinite linear;
   border-radius: 6px;
@@ -230,7 +242,7 @@ body {
 }
 .row-arrow:hover:not(:disabled) {
   color: #fff;
-  border-color: #323a52;
+  border-color: #3d3d3d;
   background: var(--color-hover);
 }
 .row-arrow:disabled {
@@ -304,15 +316,15 @@ body {
 }
 
 /* ── Details page (Stitch "Movie Details" / "TV Show Details" screens) ────
-   Darker cinematic surface: #0f1117 page, #14161f cards, #181b26 hover */
+   Darker cinematic surface: #0a0a0a page, #161616 cards, #1d1d1d hover */
 .detail-page {
-  background: #0f1117;
+  background: #0a0a0a;
 }
 .detail-card {
-  background: #14161f;
+  background: #161616;
 }
 .detail-card:hover {
-  background: #181b26;
+  background: #1d1d1d;
 }
 .detail-chip {
   padding: 2px 6px;
@@ -321,13 +333,13 @@ body {
   line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.03em;
-  background: rgba(32, 36, 52, 0.9);
-  color: #d3d8e4;
+  background: rgba(34, 34, 34, 0.9);
+  color: #d4d4d4;
 }
 .detail-select {
   -webkit-appearance: none;
   appearance: none;
-  background: #161922;
+  background: #1c1c1c;
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -338,11 +350,102 @@ body {
   outline: none;
 }
 .detail-select:hover {
-  background: #1d2230;
+  background: #242424;
 }
 .detail-select option {
-  background: #161922;
+  background: #1c1c1c;
   color: #fff;
+}
+
+/* ── Details horizontal scrollers (season pills + episode cards) ────────── */
+.epi-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.epi-scroll::-webkit-scrollbar {
+  display: none;
+}
+.epi-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+.epi-arrow:hover:not(:disabled) {
+  background: var(--color-accent);
+  border-color: transparent;
+}
+.epi-arrow:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+.epi-arrow-left { left: -8px; }
+.epi-arrow-right { right: -8px; }
+
+/* Season pill buttons — one line, uniform height */
+.season-pill {
+  height: 36px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #d4d4d4;
+  background: #1c1c1c;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.season-pill:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+.season-pill.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+.season-pill.active:hover {
+  background: #f6121d;
+}
+
+/* ── Artplayer custom controls (CC + fullscreen): same size as the built-ins,
+   sitting at the FAR RIGHT of the control bar, red tint while active ────── */
+.art-control-flux-cc,
+.art-control-flux-fs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--art-control-icon-size, 36px);
+}
+.art-control-flux-cc svg,
+.art-control-flux-fs svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.art-control-flux-cc:hover svg,
+.art-control-flux-fs:hover svg {
+  transform: scale(1.12);
+}
+.art-control-flux-cc.flux-ctl-active svg {
+  color: var(--color-accent);
 }
 
 /* Watched page: search result rows */

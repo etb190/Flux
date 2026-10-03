@@ -43,11 +43,11 @@ const SUB_DELAYS = [
 
 function ccSvg() {
   const d = 'M19 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1z';
-  return '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="' + d + '"/></svg>';
+  return '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="' + d + '"/></svg>';
 }
 function fsSvg() {
   const d = 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z';
-  return '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="' + d + '"/></svg>';
+  return '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="' + d + '"/></svg>';
 }
 
 function hostOf(url) {
@@ -319,26 +319,45 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         ],
         controls: [
           {
+            // index 200/210 → AFTER Artplayer's fullscreen (70) → the two
+            // buttons sit at the FAR RIGHT edge of the control bar.
+            // Clicks are bound in `mounted` (our own addEventListener) —
+            // not via the config `click`, so the handler is guaranteed to
+            // fire exactly once, unaffected by Artplayer's internals.
             name: 'flux-cc',
             position: 'right',
-            index: 4,
+            index: 200,
             html: ccSvg(),
             tooltip: 'Subtitles',
-            click: () => { toggleSubmenuRef.current(); return ''; }
+            mounted: (el) => {
+              el.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Keep the click away from the app-level outside-click
+                // closer on the player root — otherwise the same physical
+                // click can open the menu and then immediately close it.
+                e.stopPropagation();
+                const now = Date.now();
+                if (now - lastCcToggleRef.current < 250) return;
+                lastCcToggleRef.current = now;
+                toggleSubmenuRef.current();
+              });
+            }
           },
           {
             name: 'flux-fs',
             position: 'right',
-            index: 6,
+            index: 210,
             html: fsSvg(),
             tooltip: 'Fullscreen',
-            click: () => {
-              if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => {});
-              } else if (stageRef.current) {
-                stageRef.current.requestFullscreen().catch(() => {});
-              }
-              return '';
+            mounted: (el) => {
+              el.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (document.fullscreenElement) {
+                  document.exitFullscreen().catch(() => {});
+                } else if (stageRef.current) {
+                  stageRef.current.requestFullscreen().catch(() => {});
+                }
+              });
             }
           }
         ]
@@ -510,14 +529,26 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   }, [wakeChrome, onToggleSubmenu, closeSubmenu]);
   useEffect(() => { toggleSubmenuRef.current = toggleSubmenu; }, [toggleSubmenu]);
 
+  // Timestamp of the last CC activation — collapses the multi-click bursts
+  // some platforms deliver (mousedown+up synthesis) into one toggle.
+  const lastCcToggleRef = useRef(0);
+
+  // Red tint on the CC control while the subtitle menu is open
+  useEffect(() => {
+    const el = document.querySelector('.art-control-flux-cc');
+    if (el) el.classList.toggle('flux-ctl-active', !!submenuOpen);
+  }, [submenuOpen, videoReady]);
+
   // ── header text ────────────────────────────────────────────────────────
   const isSeries = meta && meta.type === 'series';
   const se = isSeries && episode
     ? 'S' + (episode.season ?? 1) + ' E' + (episode.episode ?? 1) + ' \u00b7 ' + (episode.title || '')
     : '';
-  const titleText = meta
-    ? meta.name + (isSeries ? ' \u2014 ' + se.split(' \u00b7 ')[0] : '')
-    : (source.title || 'Now playing');
+  const titleText = source.trailer
+    ? 'Trailer \u00b7 ' + (meta ? meta.name : (source.title || 'Now playing'))
+    : meta
+      ? meta.name + (isSeries ? ' \u2014 ' + se.split(' \u00b7 ')[0] : '')
+      : (source.title || 'Now playing');
   const subText = [
     se.split(' \u00b7 ').slice(1).join(' \u00b7 '),
     source.title || source.provider || 'Source'

@@ -56,6 +56,19 @@ async function getMetaDirect(type, id) {
   const listOf = (v) =>
     Array.isArray(v) ? v.map(String).filter(Boolean).join(', ')
       : (v != null && String(v).trim() ? String(v) : null);
+
+  // YouTube trailer id — same extraction as the main-process fetchMeta
+  const ytId = (v) => {
+    const s = String(v || '').trim();
+    if (!s) return null;
+    const m = s.match(/^(?:yt:)?([A-Za-z0-9_-]{6,})$/);
+    return m ? m[1] : null;
+  };
+  const trailer =
+    ytId(m.trailer) ||
+    (Array.isArray(m.trailers) ? ytId(m.trailers[0] && m.trailers[0].source) : null) ||
+    (Array.isArray(m.trailerStreams) ? ytId(m.trailerStreams[0] && m.trailerStreams[0].ytId) : null);
+
   return {
     id: String(m.id ?? id),
     type: String(m.type ?? type),
@@ -71,6 +84,7 @@ async function getMetaDirect(type, id) {
     director: listOf(m.director),
     writer: listOf(m.writer),
     country: listOf(m.country),
+    trailer,
     videos: (Array.isArray(m.videos) ? m.videos : [])
       .map((v) => ({
         id: String(v.id ?? ''),
