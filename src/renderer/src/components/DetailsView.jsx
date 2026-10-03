@@ -392,7 +392,7 @@ function EpisodeCard({ ep, onOpen }) {
   return (
     <div
       data-testid="episode-card"
-      title={'Find sources for EP ' + (ep.episode ?? '')}
+      title={'EP ' + (ep.episode ?? '')}
       onClick={() => onOpen(ep)}
       className="group w-[200px] shrink-0 snap-start bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-colors duration-150"
     >
@@ -409,14 +409,9 @@ function EpisodeCard({ ep, onOpen }) {
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1f1f1f] to-[#242424] text-xl font-black text-[#4a4a4a]">
-            {ep.episode != null ? ep.episode : '\u25B6'}
+            {ep.episode != null ? ep.episode : ''}
           </div>
         )}
-        <div className="absolute inset-0 bg-black/25 group-hover:bg-black/5 transition-colors flex items-center justify-center">
-          <span className="w-9 h-9 flex items-center justify-center bg-black/70 text-white group-hover:bg-accent transition-colors opacity-90 group-hover:opacity-100">
-            <PlayIcon size={18} />
-          </span>
-        </div>
       </div>
 
       {/* Text block — FIXED heights so every card is exactly as tall */}

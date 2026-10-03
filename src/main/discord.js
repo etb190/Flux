@@ -3,7 +3,7 @@
 //
 //   • One connection to the local Discord IPC pipe (Windows named pipe
 //     \\?\pipe\discord-ipc-N) owned by the main process.
-//   • Idle presence "Browsing Flux" with the session start time.
+//   • Idle presence "Browsing Netflix" with the session start time.
 //   • Watching a movie  → details "Watching {title}", state "(year)",
 //     large image = poster URL, timestamps = remaining time.
 //   • Watching a series → details "Watching {title}", state
@@ -13,7 +13,9 @@
 //   • A live toggle (default ON): off = clear presence + disconnect,
 //     on = reconnect + restore the last presence.
 //
-// The app id is the Discord Application's ID ("the discord netflix thing");
+// The Discord application is branded "Netflix" (that is what the presence
+// shows); the app id is the Discord Application's ID ("the discord netflix
+// thing");
 // the application's public key is stored next to it for reference — plain
 // Rich Presence only ever needs the application id.
 //
@@ -22,7 +24,7 @@
 
 const { Client } = require('@xhayper/discord-rpc');
 
-// Discord Application ("Flux" — the netflix-style one)
+// Discord Application (branded "Netflix" — the netflix-style one)
 const DISCORD_APP_ID = '1556017689758007427';
 // Application public key (only needed for OAuth2 token verification /
 // join flows — NOT for Rich Presence; kept here for reference).
@@ -37,7 +39,7 @@ const LOGO_KEY = 'logo';
 const TYPE_PLAYING = 0;
 const TYPE_WATCHING = 3;
 
-const APP_NAME = 'Flux';
+const APP_NAME = 'Netflix';
 
 // ── Pure presence builders (unit-testable, no client involved) ───────────
 // Timestamps mirror Helix: paused → none; otherwise remaining time
@@ -83,7 +85,7 @@ function buildMoviePresence({ title, year, posterUrl, positionSec, durationSec, 
   return {
     activityType: TYPE_WATCHING,
     details: 'Watching ' + cleanTitle,
-    // Helix: "(2021)" while watching, "In Flux" without a year
+    // Helix: "(2021)" while watching, "In Netflix" without a year
     state: cleanYear ? '(' + cleanYear + ')' : 'In ' + APP_NAME,
     largeImage: buildLargeImage(posterUrl, cleanTitle),
     smallImage: { key: LOGO_KEY, text: APP_NAME },
