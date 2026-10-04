@@ -1,0 +1,53 @@
+name: Build Windows installer
+
+# Builds the Squirrel.Windows installer (Flux Setup <version>.exe) on every
+# push to main, and on version tags additionally attaches it to a draft
+# GitHub release. Artifacts live under the run's summary page.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer/main + Squirrel installer
+        run: npm run dist:win
+
+      - name: Show dist output
+        run: Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Flux-windows-installer
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/RELEASES
+            dist/*.nupkg
+
+      - name: Attach installer to draft release (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            dist/*.exe
+            dist/RELEASES
+            dist/*.nupkg

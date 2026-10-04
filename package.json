@@ -1,8 +1,12 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "Flux - streaming app (Electron + React + Vite)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/etb190/Flux.git"
+  },
   "main": "./out/main/index.js",
   "author": "etb190",
   "license": "MIT",
@@ -41,6 +45,9 @@
       "out/**",
       "assets/**"
     ],
+    "squirrelWindows": {
+      "iconUrl": "https://raw.githubusercontent.com/etb190/Flux/main/assets/icon.ico"
+    },
     "win": {
       "target": [
         {
