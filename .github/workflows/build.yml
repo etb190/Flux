@@ -30,17 +30,18 @@ jobs:
         run: npm run dist:win
 
       - name: Show dist output
-        run: Get-ChildItem dist | Format-Table Name, Length
+        run: Get-ChildItem dist -Recurse -File | Select-Object FullName, Length
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Flux-windows-installer
           if-no-files-found: error
+          # Squirrel writes to a dist/squirrel-windows subdirectory
           path: |
-            dist/*.exe
-            dist/RELEASES
-            dist/*.nupkg
+            dist/squirrel-windows/*.exe
+            dist/squirrel-windows/RELEASES
+            dist/squirrel-windows/*.nupkg
 
       - name: Attach installer to draft release (version tags only)
         if: startsWith(github.ref, 'refs/tags/v')
@@ -48,6 +49,6 @@ jobs:
         with:
           draft: true
           files: |
-            dist/*.exe
-            dist/RELEASES
-            dist/*.nupkg
+            dist/squirrel-windows/*.exe
+            dist/squirrel-windows/RELEASES
+            dist/squirrel-windows/*.nupkg
