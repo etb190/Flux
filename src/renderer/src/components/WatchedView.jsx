@@ -6,7 +6,7 @@
  * watched — handled in the main-process library).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PosterCard from './PosterCard.jsx';
 import { CloseIcon, SearchIcon } from './icons.jsx';
 
@@ -137,6 +137,16 @@ export default function WatchedView({ list = 'watched', onOpen }) {
     } catch (_err) { /* ignore */ }
   }, [isWant]);
 
+  const sections = useMemo(() => {
+    // Series first, movies underneath — for both lists.
+    const series = items.filter((w) => w.type === 'series');
+    const movies = items.filter((w) => w.type !== 'series');
+    return [
+      { key: 'series', label: 'Series', rows: series },
+      { key: 'movie', label: 'Movies', rows: movies }
+    ].filter((s) => s.rows.length > 0);
+  }, [items]);
+
   return (
     <div data-testid="watched-view" className="max-w-[1060px]">
       <h2 className="text-[22px] font-extrabold mt-1">
@@ -182,30 +192,42 @@ export default function WatchedView({ list = 'watched', onOpen }) {
         ) : null}
       </div>
       {items.length ? (
-        <div data-testid="watched-grid" className="grid grid-cols-[repeat(auto-fill,138px)] gap-4 pb-6">
-          {items.map((entry) => (
-            <div key={entry.imdbId + entry.type} className="w-[138px]">
-              <div className="relative group">
-                <PosterCard
-                  item={{ id: entry.imdbId, type: entry.type, name: entry.title, poster: entry.poster, year: null }}
-                  onClick={() => onOpen({
-                    id: entry.imdbId, type: entry.type,
-                    name: entry.title, poster: entry.poster
-                  })}
-                />
-                <button
-                  data-testid="watched-remove"
-                  title={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
-                  aria-label={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
-                  onClick={(e) => { e.stopPropagation(); remove(entry); }}
-                  className="card-x z-10"
-                >
-                  <CloseIcon size={13} />
-                </button>
-              </div>
+        sections.map((section) => (
+          <section key={section.key} className="pb-2">
+            <div className="flex items-baseline gap-2.5 mt-2 mb-3">
+              <h3 data-testid={'watched-section-' + section.key} className="text-[15.5px] font-bold">
+                {section.label}
+              </h3>
+              <span className="text-[12.5px] text-muted">
+                {section.rows.length} {section.rows.length === 1 ? 'title' : 'titles'}
+              </span>
             </div>
-          ))}
-        </div>
+            <div data-testid="watched-grid" className="grid grid-cols-[repeat(auto-fill,138px)] gap-4 pb-4">
+              {section.rows.map((entry) => (
+                <div key={entry.imdbId + entry.type} className="w-[138px]">
+                  <div className="relative group">
+                    <PosterCard
+                      item={{ id: entry.imdbId, type: entry.type, name: entry.title, poster: entry.poster, year: null }}
+                      onClick={() => onOpen({
+                        id: entry.imdbId, type: entry.type,
+                        name: entry.title, poster: entry.poster
+                      })}
+                    />
+                    <button
+                      data-testid="watched-remove"
+                      title={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
+                      aria-label={isWant ? 'Remove from Want to watch' : 'Remove from Watched'}
+                      onClick={(e) => { e.stopPropagation(); remove(entry); }}
+                      className="card-x z-10"
+                    >
+                      <CloseIcon size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
       ) : (
         <div data-testid="watched-empty" className=" border border-dashed border-edge bg-raised px-5 py-8 text-center">
           <h4 className="text-[15px] font-semibold mb-1.5">Nothing here yet</h4>

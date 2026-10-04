@@ -810,8 +810,25 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         <PlayerWindowControls />
       </div>
 
-      {/* stage — the fullscreen target, holds the player AND the overlays */}
-      <div ref={stageRef} data-testid="player-stage" className="relative flex-1 bg-black overflow-hidden">
+      {/* stage — the fullscreen target, holds the player AND the overlays.
+          overflow-clip (not -hidden): the closed episodes drawer rests
+          translated 100% inside this box, and a hidden box is still
+          PROGRAMMATICALLY scrollable — the drawer's scrollIntoView anchoring
+          would scroll the whole stage sideways. clip cannot scroll, ever. */}
+      <div
+        ref={stageRef}
+        data-testid="player-stage"
+        className="relative flex-1 bg-black overflow-clip"
+        onClickCapture={(e) => {
+          if (!episodesOpen) return;
+          // Retract the episodes drawer on any stage click that isn't
+          // inside the drawer itself (its own handler stops propagation).
+          if (e.target && e.target.closest &&
+              e.target.closest('[data-testid="player-episodes-panel"]')) return;
+          e.stopPropagation();
+          setEpisodesOpen(false);
+        }}
+      >
         {!isEmbed ? (
           <div ref={containerRef} data-testid="player-art" className="absolute inset-0" />
         ) : isTrailer ? (
@@ -853,9 +870,13 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           </div>
         ) : null}
 
-        {/* in-player episodes panel */}
-        {episodesOpen && canBrowseEpisodes ? (
+        {/* in-player episodes drawer — stays mounted for the slide
+            animation; clicking the video retracts it (the stage's capture
+            handler below swallows that click so Artplayer doesn't toggle
+            play/pause at the same time) */}
+        {canBrowseEpisodes ? (
           <PlayerEpisodes
+            open={episodesOpen}
             meta={meta}
             episode={episode}
             onPick={(ep) => { setEpisodesOpen(false); if (onPickEpisode) onPickEpisode(ep); }}

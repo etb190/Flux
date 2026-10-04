@@ -18,7 +18,7 @@ export default function SubtitleMenu({ subs, onClose, onRefresh, onDelayMinus, o
   return (
     <div
       data-testid="player-submenu"
-      className="absolute right-4 top-16 w-[380px] max-h-[70%] flex flex-col bg-raised/95 backdrop-blur border border-edge shadow-2xl z-20 overflow-hidden"
+      className="absolute right-4 top-16 w-[380px] max-h-[70%] flex flex-col bg-raised/95 backdrop-blur border border-edge shadow-2xl z-40 overflow-hidden"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-edge shrink-0">
         <span className="font-semibold">Subtitles</span>
