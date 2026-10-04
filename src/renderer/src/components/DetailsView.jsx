@@ -203,13 +203,9 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, re
       className="relative w-full"
     >
       {/* The title's coverart is a WINDOW-level backdrop (App, fixed behind
-          everything) — the hero only layers the scrims that keep its own
-          text readable on top of it. */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/55 to-transparent" />
-      <div className="absolute inset-0 w-3/4 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-32 -left-20 w-96 h-96 bg-accent/15 blur-3xl" />
-      </div>
+          everything) — the hero itself stays CLEAR of gradients, boxes and
+          glow blobs (user request): the art + window scrim provide all the
+          contrast. */}
 
       {/* Content */}
       <div className="relative z-10 px-8 pt-14 pb-7 max-w-4xl">
@@ -318,23 +314,19 @@ function Hero({ meta, onPlayPrimary, onPlayTrailer, onListAction, membership, re
   );
 }
 
-/* ── Storyline / overview + info card (grid per the Stitch screens) ─────── */
+/* ── Storyline / overview (full-width — the Country/Genres info box was
+   removed per user request; genres stay as the tag/dot rows) ──────────── */
 
 function Overview({ meta }) {
   const isSeries = meta.type === 'series';
   const facts = (meta.genres || []).slice(0, 3);
-  // Info card: genre + country only (user request — no cast/writer block)
-  const rows = [
-    ['Country:', meta.country],
-    ['Genres:', (meta.genres || []).join(', ')]
-  ].filter(([, v]) => v);
 
   return (
     <section
       data-testid="details-overview"
-      className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-5 border-b border-white/5"
+      className="pb-5 border-b border-white/5"
     >
-      <div className="lg:col-span-2 space-y-4 min-w-0">
+      <div className="space-y-4 min-w-0">
         <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
           {isSeries ? (
             <span className="w-1.5 h-1.5 bg-accent" />
@@ -374,32 +366,27 @@ function Overview({ meta }) {
           </div>
         ) : null}
       </div>
-
-      <div className="space-y-3 text-xs bg-[#161616] p-5 border border-white/5">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <span className="text-gray-500 block mb-0.5">{label}</span>
-            <span className="text-gray-200 leading-normal font-medium">
-              {value}
-            </span>
-          </div>
-        ))}
-      </div>
     </section>
   );
 }
 
 /* ── Episodes: season pill row + episode card row (both scrollable) ─────── */
 
-function EpisodeCard({ ep, onOpen }) {
+function EpisodeCard({ ep, onOpen, needle }) {
   const [imgOk, setImgOk] = useState(true);
   const showImg = Boolean(ep.thumbnail) && imgOk;
   return (
     <div
       data-testid="episode-card"
+      data-episode-needle={needle || undefined}
       title={'EP ' + (ep.episode ?? '')}
       onClick={() => onOpen(ep)}
-      className="group w-[200px] shrink-0 snap-start bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-colors duration-150"
+      className={
+        'group w-[200px] shrink-0 snap-start bg-[#161616] hover:bg-[#1d1d1d] border cursor-pointer transition-colors duration-150 ' +
+        (needle
+          ? 'border-accent/70 hover:border-accent'
+          : 'border-white/5 hover:border-white/15')
+      }
     >
       {/* Banner — 16:9, fills the card width, identical on every card */}
       <div className="relative w-full aspect-video overflow-hidden bg-[#1d1d1d]">
@@ -435,7 +422,7 @@ function EpisodeCard({ ep, onOpen }) {
   );
 }
 
-function Episodes({ meta, onFindSources }) {
+function Episodes({ meta, onFindSources, highlight }) {
   const seasonTabs = useMemo(() => buildSeasonTabs(meta.videos || []), [meta]);
   const [currentTab, setCurrentTab] = useState(0);
 
@@ -443,6 +430,31 @@ function Episodes({ meta, onFindSources }) {
 
   // Reset to the first season whenever a new series mounts
   useEffect(() => { setCurrentTab(0); }, [meta]);
+
+  // A highlight (player top-left click) selects the season that holds the
+  // episode being watched and scrolls its card to the middle of the row.
+  useEffect(() => {
+    if (!highlight || !seasonTabs.length) return;
+    const idx = seasonTabs.findIndex((t) => (t.episodes || []).some((v) =>
+      (v.season ?? 1) === (highlight.season ?? 1) &&
+      (v.episode ?? 1) === (highlight.episode ?? 1)));
+    if (idx >= 0) setCurrentTab(idx);
+  }, [highlight, seasonTabs]);
+
+  useEffect(() => {
+    if (!highlight) return undefined;
+    const t = setTimeout(() => {
+      const el = document.querySelector('[data-episode-needle="true"]');
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+      }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [highlight, currentTab]);
+
+  const isNeedle = (ep) => Boolean(highlight &&
+    (ep.season ?? 1) === (highlight.season ?? 1) &&
+    (ep.episode ?? 1) === (highlight.episode ?? 1));
 
   if (!seasonTabs.length) {
     return (
@@ -475,7 +487,12 @@ function Episodes({ meta, onFindSources }) {
           keyed by season so switching seasons snaps back to the start. */}
       <HScroller key={currentTab} testid="episodes-row" scrollerTestid="episodes-scroll">
         {tab.episodes.map((ep, i) => (
-          <EpisodeCard key={ep.id + i} ep={ep} onOpen={onFindSources} />
+          <EpisodeCard
+            key={ep.id + i}
+            ep={ep}
+            needle={isNeedle(ep)}
+            onOpen={onFindSources}
+          />
         ))}
       </HScroller>
     </section>
@@ -486,6 +503,7 @@ function Episodes({ meta, onFindSources }) {
 
 export default function DetailsView({
   meta,
+  highlight,
   onFindSources,
   onPlayTrailer,
   scan = { sources: [], providerCount: 0, summaryText: null, scanError: null },
@@ -606,7 +624,7 @@ export default function DetailsView({
         <Overview meta={meta} />
 
         {isSeries ? (
-          <Episodes meta={meta} onFindSources={onFindSources} />
+          <Episodes meta={meta} onFindSources={onFindSources} highlight={highlight} />
         ) : (
           <SourcesView
             meta={meta}

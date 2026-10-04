@@ -58,8 +58,8 @@ contextBridge.exposeInMainWorld('fluxAPI', {
     // Returns an unsubscribe so remounting views (player) can clean up.
     return () => ipcRenderer.removeListener('flux:win:state', handler);
   },
-  // Suggestions ("Because you watched …", TMDB) + TMDB→IMDb id lookup
-  getSuggestions: () => ipcRenderer.invoke('flux:suggestions'),
+  // For You screen ("Because you watched …" rows, TMDB) + TMDB→IMDb lookup
+  recommendations: () => ipcRenderer.invoke('flux:recommendations'),
   // Trailers: host-page URL for the YouTube embed (error-153 fix) and the
   // system-browser escape hatch
   trailerUrl: (ytId) => ipcRenderer.invoke('flux:trailer:url', ytId),

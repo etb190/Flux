@@ -13,12 +13,9 @@ function fluxApi() {
 
 function summaryFromDone(evt) {
   const direct = evt.directCount || 0;
-  const embeds = evt.embedCount || 0;
-  if (direct + embeds === 0) return 'Scan complete \u2014 no sources found';
-  const parts = [];
-  if (direct) parts.push(direct + (direct === 1 ? ' direct link' : ' direct links'));
-  if (embeds) parts.push(embeds + (embeds === 1 ? ' embed player' : ' embed players'));
-  return 'Scan complete \u2014 ' + parts.join(', ');
+  if (!direct) return 'Scan complete \u2014 no sources found';
+  return 'Scan complete \u2014 ' + direct +
+    (direct === 1 ? ' direct link' : ' direct links');
 }
 
 export function useStreams() {
@@ -89,7 +86,10 @@ export function useStreams() {
       }
 
       if (evt.kind === 'provider') {
-        const batch = evt.sources || [];
+        // Embed players were removed in v0.26.0 — main no longer emits them,
+        // but any stray Embed-format row is dropped here so every consumer
+        // (rows, counts, player source list) stays embed-free.
+        const batch = (evt.sources || []).filter((s) => s && s.format !== 'Embed');
         if (batch.length) setSources((prev) => prev.concat(batch));
         return;
       }

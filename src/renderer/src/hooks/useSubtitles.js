@@ -26,7 +26,7 @@ export function useSubtitles() {
   const [menuNotice, setMenuNotice] = useState(null);
   const [selectedUrl, setSelectedUrl] = useState(null); // downloadUrl of selected variant
   const [cuesVersion, setCuesVersion] = useState(0);    // bump → overlay recompute
-  const [subsStyle, setSubsStyleState] = useState({ scale: 1, bg: 0.7 }); // overlay look
+  const [subsStyle, setSubsStyleState] = useState({ scale: 1, bg: 0 }); // overlay look — Classic White: no box, black outline
 
   const groupsRef = useRef([]);
   const selectedRef = useRef(null);

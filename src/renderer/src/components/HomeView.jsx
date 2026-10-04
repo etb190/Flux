@@ -1,10 +1,11 @@
 /* ── Home feed: rows of Stitch backdrop cards ─────────────────────────────
  * Rows (top → bottom):
  *   1. "Continue watching"        — local watch history (S/E badge + X)
- *   2. "Because you watched …"    — TMDB recommendations from the Watched list
- *   3. API rows                   — TMDB trending + Cinemeta addon catalogs
+ *   2. API rows                   — TMDB trending + Cinemeta addon catalogs
  *                                   (Popular / New / Featured / Last videos —
  *                                   Helix AddonManager port, keyless)
+ * The "Because you watched …" rows moved to the For You screen in
+ * v0.26.0 (user request — one row here, many there).
  * The hero banner was removed in v0.13.0 (user preference).
  */
 
@@ -32,7 +33,7 @@ function ArrowBtn({ dir, disabled, onClick }) {
   );
 }
 
-function CarouselRow({ title, children, testid, first }) {
+export function CarouselRow({ title, children, testid, first }) {
   const scrollerRef = useRef(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -220,74 +221,6 @@ function ContinueRow({ active, onOpen, onResume, first }) {
   );
 }
 
-// ── Suggestions ("Because you watched …", TMDB) ───────────────────────────
-
-function SuggestionCard({ item, onOpen }) {
-  const open = useCallback(async () => {
-    const api = window.fluxAPI;
-    if (!api || typeof api.tmdbToImdb !== 'function') return;
-    let imdbId = item.imdbId;
-    if (!imdbId) {
-      try {
-        const res = await api.tmdbToImdb(item.tmdbId, item.tmdbType);
-        imdbId = res && res.imdbId;
-      } catch (_err) { return; }
-    }
-    if (!imdbId) return;
-    onOpen({ id: imdbId, type: item.tmdbType, name: item.name, poster: item.poster });
-  }, [item, onOpen]);
-
-  return (
-    <div className="w-[236px] shrink-0 snap-start">
-      <BackdropCard
-        item={{
-          id: item.tmdbId, type: item.tmdbType, name: item.name,
-          poster: item.poster, backdrop: item.backdrop || null,
-          year: item.year || '', imdbRating: item.imdbRating
-        }}
-        onClick={open}
-      />
-    </div>
-  );
-}
-
-function SuggestionRows({ active, onOpen }) {
-  const [rows, setRows] = useState([]);
-
-  useEffect(() => {
-    if (!active) return undefined;
-    let alive = true;
-    const api = window.fluxAPI;
-    if (!api || typeof api.getSuggestions !== 'function') return undefined;
-    Promise.resolve(api.getSuggestions())
-      .then((data) => {
-        if (!alive) return;
-        setRows(data && Array.isArray(data.rows)
-          ? data.rows.filter((r) => r.items && r.items.length)
-          : []);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [active]);
-
-  if (!rows.length) return null;
-  return (
-    <>
-      {rows.map((row) => (
-        <CarouselRow key={row.title} title={row.title} testid="suggestion-row">
-          {row.items.map((item) => (
-            <SuggestionCard
-              key={(item.tmdbType || '') + (item.tmdbId || item.name)}
-              item={item}
-              onOpen={onOpen}
-            />
-          ))}
-        </CarouselRow>
-      ))}
-    </>
-  );
-}
-
 // ── States ────────────────────────────────────────────────────────────────
 
 function Skeleton() {
@@ -333,7 +266,6 @@ function HomeBody({ data, onOpen, active, onResume }) {
   return (
     <div data-testid="home-body">
       <ContinueRow active={active} onOpen={onOpen} onResume={onResume} first />
-      <SuggestionRows active={active} onOpen={onOpen} />
       {data.notice ? (
         <p
           data-testid="home-notice"

@@ -219,6 +219,24 @@ export function DiscoverIcon({ size = 19 }) {
   );
 }
 
+/* Material "auto awesome" sparkle — the For You recommendations tab */
+export function SparkIcon({ size = 19 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25z" />
+    </svg>
+  );
+}
+
+/* Material "playlist play" — the in-player Episodes button */
+export function ListIcon({ size = 16 }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      <path fill="currentColor" d="M3 10h11v2H3zm0-4h11v2H3zm0 8h7v2H3zm13-1v8l5.5-4z" />
+    </svg>
+  );
+}
+
 /* ── Custom window controls (frameless title bar, Netflix-dark chrome) ── */
 
 export function WinMinimizeIcon({ size = 14 }) {

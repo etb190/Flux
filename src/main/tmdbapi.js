@@ -23,6 +23,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;   // 6h
 const ROW_CAP = 16;                        // cards per suggestion row
 const TV_SLICE = 5;                        // TV titles mixed into movie rows
 const SUGGEST_ROWS_CAP = 4;                // watched titles per home load
+const RECS_ROWS_CAP = 20;                  // watched titles on the For You screen
 const IMG_BASE = 'https://image.tmdb.org/t/p';
 
 const cache = new Map();                   // url → { at, data }
@@ -155,14 +156,16 @@ async function tvByGenreName(key, genreName) {
   return mapList(data && data.results, 'series', TV_SLICE);
 }
 
-// ── Suggestion rows for the home page ─────────────────────────────────────
+// ── Suggestion rows for the home page + the For You screen ────────────────
 // watched: [{imdbId, type, title, genres, ...}] (most recent first)
+// opts.rowsCap: how many watched titles get a row (home: 4, For You: 20).
 // Returns { rows: [{ title, items }] } — per-row failures are dropped so a
 // single bad lookup never blanks the whole section.
-async function buildSuggestionRows(key, watched) {
+async function buildSuggestionRows(key, watched, opts) {
   if (!key) return { rows: [] };
+  const rowsCap = (opts && opts.rowsCap) || SUGGEST_ROWS_CAP;
   const list = (Array.isArray(watched) ? watched : [])
-    .slice(0, SUGGEST_ROWS_CAP);
+    .slice(0, rowsCap);
   if (!list.length) return { rows: [] };
 
   const settled = await Promise.allSettled(list.map(async (entry) => {
@@ -199,7 +202,7 @@ async function buildSuggestionRows(key, watched) {
 }
 
 module.exports = {
-  CACHE_TTL_MS, ROW_CAP, TV_SLICE, SUGGEST_ROWS_CAP, IMG_BASE,
+  CACHE_TTL_MS, ROW_CAP, TV_SLICE, SUGGEST_ROWS_CAP, RECS_ROWS_CAP, IMG_BASE,
   apiGet, mapCard, mapList,
   tmdbFromImdb, tmdbToImdb, recommendations, tvByGenreName,
   buildSuggestionRows, _setFetcher, _clearCache

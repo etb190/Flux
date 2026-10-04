@@ -488,94 +488,6 @@ async function scrape2Embed(ctx) {
   return out;
 }
 
-// ── Embed-player sources (always available playback pages) ────────────────
-// These are the well-known embed players that carry the episode; the future
-// Flux player can open them in a webview/iframe. Listed after direct links.
-function embedSources(ctx) {
-  const s = ctx.season ?? 1;
-  const e = ctx.episode ?? 1;
-  const out = [];
-
-  if (ctx.isTv) {
-    if (ctx.tmdbId) {
-      out.push(
-        {
-          provider: 'VidSrc.xyz', title: 'VidSrc.xyz', format: 'Embed', quality: null,
-          description: 'Embed player · vidsrc.xyz', url:
-            'https://vidsrc.xyz/embed/tv/' + ctx.tmdbId + '/' + s + '-' + e
-        },
-        {
-          provider: 'VidLink', title: 'VidLink Embed', format: 'Embed', quality: null,
-          description: 'Embed player · vidlink.pro', url:
-            'https://vidlink.pro/tv/' + ctx.tmdbId + '/' + s + '/' + e
-        },
-        {
-          provider: 'Videasy', title: 'Videasy Embed', format: 'Embed', quality: null,
-          description: 'Embed player · player.videasy.net', url:
-            'https://player.videasy.net/tv/' + ctx.tmdbId + '/' + s + '/' + e
-        },
-        {
-          provider: 'VidFast', title: 'VidFast Embed', format: 'Embed', quality: null,
-          description: 'Embed player · vidfast.pro', url:
-            'https://vidfast.pro/tv/' + ctx.tmdbId + '/' + s + '/' + e
-        },
-        {
-          provider: '2Embed', title: '2Embed Embed', format: 'Embed', quality: null,
-          description: 'Embed player · 2embed.cc', url:
-            'https://www.2embed.cc/embedtv/' + ctx.tmdbId + '&s=' + s + '&e=' + e
-        }
-      );
-    }
-    if (ctx.imdbId && ctx.imdbId.startsWith('tt')) {
-      out.push({
-        provider: 'MultiEmbed', title: 'MultiEmbed', format: 'Embed', quality: null,
-        description: 'Embed player · multiembed.mov', url:
-          'https://multiembed.mov/?video_id=' + ctx.imdbId + '&s=' + s + '&e=' + e
-      });
-    }
-  } else {
-    if (ctx.tmdbId) {
-      out.push(
-        {
-          provider: 'VidSrc.xyz', title: 'VidSrc.xyz', format: 'Embed', quality: null,
-          description: 'Embed player · vidsrc.xyz', url:
-            'https://vidsrc.xyz/embed/movie/' + ctx.tmdbId
-        },
-        {
-          provider: 'VidLink', title: 'VidLink Embed', format: 'Embed', quality: null,
-          description: 'Embed player · vidlink.pro', url:
-            'https://vidlink.pro/movie/' + ctx.tmdbId
-        },
-        {
-          provider: 'Videasy', title: 'Videasy Embed', format: 'Embed', quality: null,
-          description: 'Embed player · player.videasy.net', url:
-            'https://player.videasy.net/movie/' + ctx.tmdbId
-        },
-        {
-          provider: 'VidFast', title: 'VidFast Embed', format: 'Embed', quality: null,
-          description: 'Embed player · vidfast.pro', url:
-            'https://vidfast.pro/movie/' + ctx.tmdbId
-        }
-      );
-    }
-    if (ctx.imdbId && ctx.imdbId.startsWith('tt')) {
-      out.push(
-        {
-          provider: 'MultiEmbed', title: 'MultiEmbed', format: 'Embed', quality: null,
-          description: 'Embed player · multiembed.mov', url:
-            'https://multiembed.mov/?video_id=' + ctx.imdbId
-        },
-        {
-          provider: '2Embed', title: '2Embed Embed', format: 'Embed', quality: null,
-          description: 'Embed player · 2embed.cc', url:
-            'https://www.2embed.cc/embed/' + ctx.imdbId
-        }
-      );
-    }
-  }
-  return out;
-}
-
 // ── Orchestrator (Helix ScraperManager.scrapeAll pattern) ─────────────────
 const HTTP_PROVIDERS = [
   { name: 'VidSrc', fn: scrapeVidSrc },
@@ -654,8 +566,9 @@ async function fetchStreams(params, cb) {
   const onDone = cb.onDone || (() => {});
 
   // Fire init immediately so the renderer can build its provider chips
-  // before any network wait.
-  onInit(HTTP_PROVIDERS.map((p) => p.name).concat(['Embed players']));
+  // before any network wait. (Embed players were dropped in v0.26.0 —
+  // direct links only.)
+  onInit(HTTP_PROVIDERS.map((p) => p.name));
 
   // Resolve TMDB id once, shared by all providers (Helix TmdbHelper cache)
   try {
@@ -698,19 +611,12 @@ async function fetchStreams(params, cb) {
 
   await Promise.all(HTTP_PROVIDERS.map(runProvider));
 
-  // Embed players last so direct links stay on top
-  const embeds = embedSources(ctx).filter((s) => !seenUrls.has(s.url));
-  for (const s of embeds) seenUrls.add(s.url);
-  providerStats['Embed players'] = { status: embeds.length ? 'ok' : 'empty', count: embeds.length };
-  onProvider({ provider: 'Embed players', status: embeds.length ? 'ok' : 'empty', count: embeds.length, sources: embeds });
-
   const direct = sources.length;
   const summary = {
     sources,
-    embeds,
-    total: direct + embeds.length,
+    total: direct,
     directCount: direct,
-    embedCount: embeds.length,
+    embedCount: 0,
     providers: providerStats,
     tmdbId: ctx.tmdbId
   };
@@ -724,7 +630,6 @@ const _internals = {
   parse2EmbedServers,
   parseXpsPlaylist,
   parseVidCoreSources,
-  embedSources,
   fmtOf
 };
 

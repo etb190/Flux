@@ -1,13 +1,14 @@
 // ── Flux subtitles: port of Helix's subtitle management system ───────────
 // Helix (lib/services/subtitles/*) runs 5 subtitle providers in parallel and
 // streams results per provider, then downloads + extracts (ZIP/GZIP) the
-// chosen file and re-encodes it to UTF-8. Flux ports the same providers:
+// chosen file and re-encodes it to UTF-8. Flux keeps the providers that are
+// actually alive (v0.26.0 audit — Subdl removed: autocomplete 404s and the
+// API key gate 403s; Wyzie survives on its free daily quota):
 //   Wyzie          - sub.wyzie.io search API (direct srt/vtt links)
-//   OpenSubtitles  - stremio-compatible endpoints (opensubtitles.strem.io…)
-//   Subdl          - api3.subdl.com autocomplete + subdl.com HTML scraping
+//   OpenSubtitles  - stremio-compatible endpoints (v3 first — it's the one
+//                    that answers; the .homes mirror 404s and only burned
+//                    the search timeout budget before it)
 //   SubtitleCat    - subtitlecat.com scraping + on-the-fly Google translation
-// (Helix's 5th provider, StremioAddon, needs an addon manager Flux doesn't
-// have yet; OpenSubtitles already covers the same stremio API shape.)
 //
 // Searches stream back per provider via onBatch(); downloads return the
 // subtitle TEXT decoded to UTF-8 (the renderer renders cues itself).
@@ -302,8 +303,11 @@ async function wyzieSearch({ name, imdbId, season, episode }) {
 }
 
 // ── Provider: OpenSubtitles via stremio endpoints (Helix) ─────────────────
+// v3 answers first-try with the full catalogue (verified 200 in ~0.3s);
+// the old .homes mirror 404s and opensubtitles.strem.io serves HTML, so
+// they only sit here as fallbacks — v3 MUST be tried first or a slow
+// mirror eats the whole provider timeout before the good endpoint runs.
 const OS_ENDPOINTS = [
-  'https://opensubtitles.stremio.homes',
   'https://opensubtitles-v3.strem.io',
   'https://opensubtitles.strem.io'
 ];
@@ -343,235 +347,6 @@ async function opensubtitlesSearch({ imdbId, season, episode }) {
       });
     }
     if (out.length) break;   // first responding endpoint is enough (Helix)
-  }
-  return out;
-}
-
-// ── Provider: Subdl (Helix subdl_provider.dart, HTML via regex) ───────────
-function subdlCleanTitle(input, explicitYear) {
-  const raw = String(input || '').trim();
-  let year = explicitYear || null;
-  const normalized = raw.replace(/[._]/g, ' ');
-
-  const yearMatch = /(?:\b|\()((?:19|20)\d{2})(?:\b|\))/.exec(normalized);
-  let titlePart = normalized;
-  if (yearMatch) {
-    if (year == null) year = parseInt(yearMatch[1], 10);
-    const before = normalized.slice(0, yearMatch.index).trim();
-    if (before) titlePart = before;
-  } else {
-    const tagMatch = /\b(?:2160p|1080p|1080i|720p|576p|480p|4k|uhd|web-?dl|webrip|bluray|brrip|dvdrip|hdtv|s\d{1,2}e\d{1,2}|season\s*\d{1,2})\b/i.exec(normalized);
-    if (tagMatch) {
-      const before = normalized.slice(0, tagMatch.index).trim();
-      if (before) titlePart = before;
-    }
-  }
-  let clean = titlePart.replace(/[\[\](){}\-:+]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!clean) clean = raw;
-  return { cleanTitle: clean, year };
-}
-
-function subdlNormalize(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function subdlFindBestMatch(items, cleanTitle, targetYear, isTvShow) {
-  const norm = subdlNormalize(cleanTitle);
-  const typeFiltered = items.filter((it) => {
-    const type = String(it.type || 'movie').toLowerCase();
-    return isTvShow ? type === 'tv' : type === 'movie';
-  });
-  const candidates = typeFiltered.length ? typeFiltered : items;
-
-  if (targetYear != null) {
-    // pass 1: exact title + exact year
-    for (const it of candidates) {
-      const y = parseInt(it.year, 10);
-      if ((subdlNormalize(it.name) === norm || subdlNormalize(it.original_name) === norm) && y === targetYear) return it;
-    }
-    // pass 2: contained title + exact year
-    for (const it of candidates) {
-      const n1 = subdlNormalize(it.name);
-      const n2 = subdlNormalize(it.original_name);
-      const y = parseInt(it.year, 10);
-      if ((n1.includes(norm) || norm.includes(n1) || n2.includes(norm) || norm.includes(n2)) && y === targetYear) return it;
-    }
-    // pass 3: exact title + year ±1
-    for (const it of candidates) {
-      const n1 = subdlNormalize(it.name);
-      const n2 = subdlNormalize(it.original_name);
-      const y = parseInt(it.year, 10);
-      if (!Number.isNaN(y) && (n1 === norm || n2 === norm) && Math.abs(y - targetYear) <= 1) return it;
-    }
-    return null;   // Helix: strict when a target year exists
-  }
-
-  for (const it of candidates) {
-    if (subdlNormalize(it.name) === norm || subdlNormalize(it.original_name) === norm) return it;
-  }
-  for (const it of candidates) {
-    const n1 = subdlNormalize(it.name);
-    const n2 = subdlNormalize(it.original_name);
-    if (n1.includes(norm) || norm.includes(n1) || n2.includes(norm) || norm.includes(n2)) return it;
-  }
-  return candidates.length ? candidates[0] : null;
-}
-
-const SEASON_WORDS = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth',
-  'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth', 'thirteenth',
-  'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth',
-  'nineteenth', 'twentieth'];
-
-const SUBDL_HEADERS = { 'User-Agent': UA, Accept: 'application/json, text/html, */*' };
-
-async function subdlSearch({ name, imdbId, season, episode, year }) {
-  const isTvShow = season != null && episode != null;
-  const parsed = subdlCleanTitle(name, year);
-  const cleanTitle = parsed.cleanTitle;
-  const targetYear = parsed.year;
-
-  const queries = [];
-  if (targetYear != null) queries.push(cleanTitle + ' ' + targetYear);
-  queries.push(cleanTitle);
-  if (imdbId) queries.push(String(imdbId));
-
-  const queryApi = async (q) => {
-    const data = await fetchJson('https://api3.subdl.com/auto?query=' + encodeURIComponent(q), {
-      headers: SUBDL_HEADERS, timeoutMs: 5000
-    });
-    const list = data && Array.isArray(data.results) ? data.results : [];
-    return list.filter((x) => x && typeof x === 'object');
-  };
-
-  const scrapeWeb = async (q) => {
-    const html = await fetchText('https://subdl.com/search/' + encodeURIComponent(q), {
-      headers: SUBDL_HEADERS, timeoutMs: 6000
-    });
-    if (html == null) return [];
-    const out = [];
-    const re = /<a\s+href="(\/subtitle\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-    let m;
-    while ((m = re.exec(html))) {
-      const fullText = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!fullText) continue;
-      const ym = /\((\d{4})\)/.exec(fullText);
-      const isTv = / tv /.test(fullText.toLowerCase()) || fullText.toLowerCase().endsWith(' tv');
-      let nm = fullText;
-      if (ym) nm = fullText.slice(0, ym.index).trim();
-      out.push({
-        type: isTv ? 'tv' : 'movie',
-        name: nm,
-        year: ym ? parseInt(ym[1], 10) : null,
-        link: m[1],
-        original_name: nm
-      });
-    }
-    return out;
-  };
-
-  let best = null;
-  for (const q of queries) {
-    if (best) break;
-    const items = await queryApi(q).catch(() => []);
-    if (items.length) best = subdlFindBestMatch(items, cleanTitle, targetYear, isTvShow);
-  }
-  if (!best) {
-    for (const q of queries) {
-      if (best) break;
-      const web = await scrapeWeb(q).catch(() => []);
-      if (web.length) best = subdlFindBestMatch(web, cleanTitle, targetYear, isTvShow);
-    }
-  }
-  if (!best || !best.link) return [];
-
-  let targetUrl = String(best.link).startsWith('http') ? String(best.link) : 'https://subdl.com' + best.link;
-
-  // TV: find the season page on the show page (Helix)
-  if (isTvShow) {
-    const showHtml = await fetchText(targetUrl, { headers: SUBDL_HEADERS, timeoutMs: 5000 });
-    if (showHtml != null) {
-      const seasonWord = SEASON_WORDS[season] || String(season);
-      const re = /<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-      let m;
-      while ((m = re.exec(showHtml))) {
-        if (!/\/subtitle\//.test(m[1])) continue;
-        const text = m[2].replace(/<[^>]+>/g, '').trim().toLowerCase();
-        const href = m[1].toLowerCase();
-        if (text.includes('season ' + season) ||
-            text.includes(seasonWord + ' season') ||
-            href.endsWith('/season-' + season) ||
-            href.endsWith('/' + seasonWord + '-season')) {
-          targetUrl = m[1].startsWith('http') ? m[1] : 'https://subdl.com' + m[1];
-          break;
-        }
-      }
-    }
-  }
-
-  // Scrape the final page (movie or season page)
-  const html = await fetchText(targetUrl, { headers: SUBDL_HEADERS, timeoutMs: 6000 });
-  if (html == null) return [];
-
-  const out = [];
-  const langSplit = /<div[^>]*data-language-name="([^"]*)"[^>]*>/gi;
-  const marks = [];
-  let lm;
-  while ((lm = langSplit.exec(html))) marks.push({ lang: lm[1], start: langSplit.lastIndex });
-  for (let i = 0; i < marks.length; i++) {
-    // cut the section at the next data-language-name div (or end of page)
-    const nextIdx = (() => {
-      const reNext = /<div[^>]*data-language-name=/gi;
-      reNext.lastIndex = marks[i].start;
-      const nx = reNext.exec(html);
-      return nx ? nx.index : html.length;
-    })();
-    const section = html.slice(marks[i].start, nextIdx);
-    const language = marks[i].lang || 'Unknown';
-
-    const liRe = /<li[^>]*data-row[^>]*>([\s\S]*?)<\/li>/gi;
-    let li;
-    while ((li = liRe.exec(section))) {
-      const rowHtml = li[0];
-
-      if (isTvShow) {
-        const epFrom = (rowHtml.match(/data-episode-from="(\d+)"/) || [])[1];
-        const epTo = (rowHtml.match(/data-episode-to="(\d+)"/) || [])[1];
-        let match = false;
-        if (epFrom) {
-          const from = parseInt(epFrom, 10);
-          const to = epTo ? parseInt(epTo, 10) : from;
-          if (episode >= from && episode <= to) match = true;
-        }
-        if (!match) {
-          const h4 = (rowHtml.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i) || [])[1] || '';
-          const titleText = h4.replace(/<[^>]+>/g, '');
-          const epRe = new RegExp('\\b(?:s\\d{1,2})?e0*' + episode + '(?:[^\\d]|$)', 'i');
-          if (epRe.test(titleText)) match = true;
-        }
-        if (!match) continue;
-      }
-
-      const aMatch =
-        rowHtml.match(/<a[^>]*href="(https?:\/\/dl\.subdl\.com[^"]+|[^"]*dl\.subdl\.com[^"]*)"/i) ||
-        rowHtml.match(/<a[^>]*href="([^"]*\.zip[^"]*)"/i) ||
-        rowHtml.match(/<a[^>]*href="(\/subtitle\/[^"]+)"[^>]*title="[^"]*Download[^"]*"/i) ||
-        rowHtml.match(/<a[^>]*href="(\/subtitle\/[^"]+)"/i);
-      const titleMatch = rowHtml.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i) || rowHtml.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
-
-      if (aMatch && titleMatch) {
-        let dl = aMatch[1];
-        if (!dl.startsWith('http')) dl = 'https://subdl.com' + dl;
-        const title = titleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() || 'Subtitle';
-        out.push({
-          providerName: 'Subdl',
-          language,
-          title,
-          downloadUrl: dl,
-          format: 'zip',
-          extraData: {}
-        });
-      }
-    }
   }
   return out;
 }
@@ -736,10 +511,9 @@ function timeoutWrap(promise, ms, providerName) {
 // they arrive (onBatch(variants, providerName)), then onDone(total).
 async function searchSubtitles(params, { onBatch, onDone } = {}) {
   const providers = [
-    { name: 'Wyzie', fn: wyzieSearch, timeout: 6000 },
-    { name: 'SubtitleCat', fn: subtitlecatSearch, timeout: 12000 },
-    { name: 'OpenSubtitles', fn: opensubtitlesSearch, timeout: 6000 },
-    { name: 'Subdl', fn: subdlSearch, timeout: 9000 }
+    { name: 'OpenSubtitles', fn: opensubtitlesSearch, timeout: 8000 },
+    { name: 'Wyzie', fn: wyzieSearch, timeout: 8000 },
+    { name: 'SubtitleCat', fn: subtitlecatSearch, timeout: 15000 }
   ];
 
   let pending = providers.length;
@@ -866,7 +640,6 @@ async function downloadSubtitle(variant) {
   }
 
   const headers = { 'User-Agent': UA, Accept: '*/*' };
-  if (url.includes('subdl.com')) headers.Referer = 'https://subdl.com/';
   if (variant.providerName === 'Wyzie') Object.assign(headers, WYZIE_HEADERS);
   if (extra.headers && typeof extra.headers === 'object') {
     for (const [k, v] of Object.entries(extra.headers)) headers[k] = String(v);

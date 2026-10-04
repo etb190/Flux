@@ -27,6 +27,32 @@
     U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* ── Poppins — the player's subtitle face ──────────────────────────────
+   The original repo renders subtitles in Poppins SemiBold (white, black
+   outline, no box — its "Classic White" preset). Ship the same font files
+   so the overlay looks identical. */
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/Poppins-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/Poppins-Medium.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/Poppins-SemiBold.ttf") format("truetype");
+}
+
 @theme {
   /* Stitch tokens (semantic names kept from the vanilla UI) */
   --color-bg: #121212;        /* main content background (light black) */

@@ -1,12 +1,14 @@
 /* ── Sources view — Stitch "Available Streaming Sources & Mirrors" section ─
  * Section header with the red server glyph + operational badge, filter row,
  * and uniform server cards: icon tile, name, format/quality chips, meta line
- * and a red "Stream Now" action. No source is singled out as recommended. */
+ * and a red "Stream Now" action.
+ * Ordering (user spec): FSOnline first, then Movy, then sources with a
+ * known size, then everything else — embed players are gone entirely. */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GB, fmtSize } from '../lib/format.js';
 import {
-  PlayIcon, SearchIcon, DnsIcon, BoltIcon, CloudIcon, LinkIcon, FilmIcon,
+  PlayIcon, SearchIcon, DnsIcon, BoltIcon, CloudIcon, FilmIcon,
   ChevronDownIcon, CheckIcon
 } from './icons.jsx';
 
@@ -111,31 +113,25 @@ function SizeSelect({ value, onChange }) {
 
 function SourceRow({ src, onPlay }) {
   const formatClass =
-    src.format === 'Embed'
-      ? 'bg-series/15 text-series'
-      : src.format === 'HLS'
-        ? 'bg-accent/15 text-accent'
-        : src.format === 'DASH'
-          ? 'bg-gold/15 text-gold'
-          : 'bg-movie/15 text-movie';
+    src.format === 'HLS'
+      ? 'bg-accent/15 text-accent'
+      : src.format === 'DASH'
+        ? 'bg-gold/15 text-gold'
+        : 'bg-movie/15 text-movie';
   const sizeLabel = fmtSize(src.sizeBytes);
   const host = hostOf(src.url);
-  const tile = src.format === 'Embed'
-    ? <LinkIcon size={20} />
-    : src.format === 'HLS'
-      ? <BoltIcon size={20} />
-      : src.format === 'DASH'
-        ? <FilmIcon size={20} />
-        : <CloudIcon size={20} />;
+  const tile = src.format === 'HLS'
+    ? <BoltIcon size={20} />
+    : src.format === 'DASH'
+      ? <FilmIcon size={20} />
+      : <CloudIcon size={20} />;
 
   return (
     <div
       data-testid="source-row"
+      data-provider={src.provider || ''}
       onClick={() => onPlay(src)}
-      className={
-        'group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-200 ' +
-        (src.format === 'Embed' ? ' opacity-90' : '')
-      }
+      className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 bg-[#161616] hover:bg-[#1d1d1d] border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-200"
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="w-11 h-11 flex items-center justify-center shrink-0 bg-[#232323] text-[#9b9b9b]">
@@ -192,7 +188,17 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  const { direct, embeds, shown } = useMemo(() => {
+  // Rank groups (stable within a group — arrival order preserved):
+  //   0 FSOnline · 1 Movy · 2 has a known size · 3 everything else
+  const rank = (src) => {
+    const p = String(src.provider || '').toLowerCase();
+    if (p === 'fsonline') return 0;
+    if (p === 'movy') return 1;
+    if (src.sizeBytes != null) return 2;
+    return 3;
+  };
+
+  const { rows, shown } = useMemo(() => {
     const matches = (src) => {
       if (normalizedQuery) {
         const hay = ((src.title || '') + ' ' + (src.provider || '') + ' ' +
@@ -203,15 +209,13 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
       if (sizeFilter === 'lt1gb' && (src.sizeBytes == null || src.sizeBytes >= GB)) return false;
       return true;
     };
-    const d = [];
-    const e = [];
-    let shown = 0;
+    const kept = [];
     for (const src of scan.sources) {
-      if (!matches(src)) continue;
-      shown++;
-      (src.format === 'Embed' ? e : d).push(src);
+      if (matches(src)) kept.push(src);
     }
-    return { direct: d, embeds: e, shown };
+    // Array.sort is stable in V8 — FSOnline/Movy keep their internal order
+    kept.sort((a, b) => rank(a) - rank(b));
+    return { rows: kept, shown: kept.length };
   }, [scan.sources, normalizedQuery, sizeFilter]);
 
   const isSeries = meta.type === 'series';
@@ -234,7 +238,6 @@ export default function SourcesView({ meta, episode, scan, onPlay }) {
 
   const showEmpty = scan.summaryText !== null && scan.sources.length === 0;
   const showNomatch = scan.sources.length > 0 && shown === 0;
-  const rows = direct.concat(embeds);
   const scanning = scan.summaryText === null && !scan.scanError;
 
   return (

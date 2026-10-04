@@ -365,16 +365,18 @@ ipcMain.handle('flux:want:add', (_e, entry) => {
 ipcMain.handle('flux:want:remove', (_e, imdbId) =>
   library.removeWant(libraryFile(), imdbId));
 
-// ── IPC: TMDB suggestion rows for the watched list ───────────────────────
-ipcMain.handle('flux:suggestions', async () => {
+// ── IPC: TMDB recommendation rows for the For You screen ────────────────
+// One "Because you watched X" row per watched title (up to 20, most
+// recent first). Shares tmdbapi's 6h cache with everything else.
+ipcMain.handle('flux:recommendations', async () => {
   const s = loadSettings(settingsFile());
   const key = s.tmdbApiKey || '';
-  if (!key) return { rows: [] };        // TMDB key cleared → no suggestions
+  if (!key) return { rows: [] };        // TMDB key cleared → no rows
   try {
     return await tmdbapi.buildSuggestionRows(
-      key, library.listWatched(libraryFile()));
+      key, library.listWatched(libraryFile()), { rowsCap: tmdbapi.RECS_ROWS_CAP });
   } catch (e) {
-    return { error: (e && e.message) || 'Suggestions failed to load.' };
+    return { error: (e && e.message) || 'Recommendations failed to load.' };
   }
 });
 

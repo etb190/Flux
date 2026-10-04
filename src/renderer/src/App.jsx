@@ -11,6 +11,7 @@ import TopBar from './components/TopBar.jsx';
 import SideBar from './components/SideBar.jsx';
 import HomeView from './components/HomeView.jsx';
 import DiscoverView from './components/DiscoverView.jsx';
+import RecommendationsView from './components/RecommendationsView.jsx';
 import WatchedView from './components/WatchedView.jsx';
 import ResultsView from './components/ResultsView.jsx';
 import DetailsView from './components/DetailsView.jsx';
@@ -46,6 +47,7 @@ export default function App() {
   const scanTargetRef = useRef(null);        // params behind the running/last scan
   const resumeEntryRef = useRef(null);       // history entry behind a resumed player
   const [resumeSec, setResumeSec] = useState(0);   // seek target for the player
+  const [detailsHighlight, setDetailsHighlight] = useState(null); // S/E to land on in details
 
   // mirrors for the stable Esc handler
   const viewRef = useRef(view);
@@ -184,6 +186,7 @@ export default function App() {
   const openDetails = useCallback(async (item, from) => {
     const seq = ++detailsSeqRef.current;
     setMeta(null);
+    setDetailsHighlight(null);
     streams.stopScan();
     scanTargetRef.current = null;
     detailsReturnRef.current = from === 'home' ? 'home' : 'results';
@@ -376,6 +379,34 @@ export default function App() {
     }
   }, [meta, openSources]);
 
+  // ── player episodes panel → play a different episode ───────────────────
+  // Drops the playback overlay and lands on the picked episode's source
+  // list (openSources reuses a matching running scan; otherwise rescans).
+  const pickEpisodeFromPlayer = useCallback((ep) => {
+    setSubmenuOpen(false);
+    setActiveSource(null);
+    resumeEntryRef.current = null;             // the resume entry is stale now
+    openSources(ep);
+  }, [openSources]);
+
+  // ── player top-left container → the title's details page ───────────────
+  // Uses the meta already loaded for playback (no refetch). Series land on
+  // the season being watched with the playing episode scrolled into view;
+  // movies re-assert the inline sources scan (no-op when it matches).
+  const openDetailsFromPlayer = useCallback(() => {
+    const m = meta;
+    if (!m) return;
+    setSubmenuOpen(false);
+    setActiveSource(null);
+    resumeEntryRef.current = null;
+    detailsReturnRef.current = 'home';
+    setDetailsHighlight(m.type === 'series' && episode
+      ? { season: episode.season ?? 1, episode: episode.episode ?? 1 }
+      : null);
+    if (m.type === 'movie') ensureMovieScan(m);
+    setView('details');
+  }, [meta, episode, ensureMovieScan]);
+
   // ── global Esc chain ───────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e) => {
@@ -462,6 +493,8 @@ export default function App() {
           {view === 'home' ? (
             homeTab === 'discover' ? (
               <DiscoverView onOpen={(item) => openDetails(item, 'home')} />
+            ) : homeTab === 'recs' ? (
+              <RecommendationsView active onOpen={(item) => openDetails(item, 'home')} />
             ) : homeTab === 'watched' ? (
               <WatchedView list="watched" onOpen={(item) => openDetails(item, 'home')} />
             ) : homeTab === 'want' ? (
@@ -539,6 +572,7 @@ export default function App() {
                 <DetailsView
                   meta={meta}
                   scan={streams}
+                  highlight={detailsHighlight}
                   onFindSources={openSources}
                   onPlaySource={openPlayer}
                   onAutoScan={ensureMovieScan}
@@ -565,6 +599,8 @@ export default function App() {
           subs={subs}
           resumeSec={resumeSec}
           onBack={closePlayer}
+          onPickEpisode={pickEpisodeFromPlayer}
+          onOpenDetails={openDetailsFromPlayer}
           submenuOpen={submenuOpen}
           onToggleSubmenu={() => setSubmenuOpen((v) => !v)}
           onCloseSubmenu={() => setSubmenuOpen(false)}

@@ -13,8 +13,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import SubtitleMenu from './SubtitleMenu.jsx';
+import PlayerEpisodes from './PlayerEpisodes.jsx';
 import { fmtDelay } from '../lib/format.js';
-import { BackIcon, SwitchIcon, WinMinimizeIcon, WinMaximizeIcon, WinRestoreIcon, WinCloseIcon } from './icons.jsx';
+import { BackIcon, SwitchIcon, ListIcon, WinMinimizeIcon, WinMaximizeIcon, WinRestoreIcon, WinCloseIcon } from './icons.jsx';
 
 const CHROME_IDLE_MS = 2600;
 
@@ -130,7 +131,7 @@ function applyPlayerRules(src, sources) {
   api.setPlayerRules(rules);
 }
 
-export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
+export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
   const containerRef = useRef(null);   // Artplayer mount point
   const stageRef = useRef(null);       // fullscreen target (art + overlays)
   const artRef = useRef(null);
@@ -151,6 +152,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   const [idle, setIdle] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [videoReady, setVideoReady] = useState(false);   // Artplayer mounted
+  const [episodesOpen, setEpisodesOpen] = useState(false); // in-player episode switcher
 
   const isEmbed = source.format === 'Embed';
   const isTrailer = Boolean(source.trailer);
@@ -325,7 +327,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       }
     }, 25000);
 
-    const style = subs.subsStyle || { scale: 1, bg: 0.7 };
+    const style = subs.subsStyle || { scale: 1, bg: 0 };
     const delayNow = subs.delay || 0;
 
     let art;
@@ -333,37 +335,42 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       art = new Artplayer({
         container: containerRef.current,
         url: source.url,
-        type: isHls ? 'm3u8' : undefined,
-        customType: isHls ? {
-          m3u8: (video, url) => {
-            const hls = new Hls({
-              enableWorker: true,
-              backBufferLength: 90,
-              maxBufferLength: 30,
-              // Subtitles are rendered by our own overlay (styling + delay
-              // support) instead of native <track> elements.
-              renderTextTracksNatively: false
-            });
-            hlsRef.current = hls;
-            try { art.m3u8 = hls; } catch (_err) {}
-            subs.attachHls(hls);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              // Embedded WebVTT subtitle tracks → menu
-              subs.setEmbeddedTracks(hls);
-              video.play().catch(() => {});
-            });
-            hls.on(Hls.Events.CUES_PARSED, (_e, data) => subs.pushEmbeddedCues(data));
-            hls.on(Hls.Events.ERROR, (_e, data) => {
-              if (!data || !data.fatal) return;
-              if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                try { hls.recoverMediaError(); return; } catch (_err) {}
-              }
-              showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
-            });
-            hls.loadSource(url);
-            hls.attachMedia(video);
+        // HLS only: Artplayer's option validator REJECTS `type: undefined`
+        // ("option.type requires 'string' type") and would fail-card every
+        // direct MP4/file source — so the keys are simply OMITTED for them.
+        ...(isHls ? {
+          type: 'm3u8',
+          customType: {
+            m3u8: (video, url) => {
+              const hls = new Hls({
+                enableWorker: true,
+                backBufferLength: 90,
+                maxBufferLength: 30,
+                // Subtitles are rendered by our own overlay (styling + delay
+                // support) instead of native <track> elements.
+                renderTextTracksNatively: false
+              });
+              hlsRef.current = hls;
+              try { art.m3u8 = hls; } catch (_err) {}
+              subs.attachHls(hls);
+              hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                // Embedded WebVTT subtitle tracks → menu
+                subs.setEmbeddedTracks(hls);
+                video.play().catch(() => {});
+              });
+              hls.on(Hls.Events.CUES_PARSED, (_e, data) => subs.pushEmbeddedCues(data));
+              hls.on(Hls.Events.ERROR, (_e, data) => {
+                if (!data || !data.fatal) return;
+                if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                  try { hls.recoverMediaError(); return; } catch (_err) {}
+                }
+                showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
+              });
+              hls.loadSource(url);
+              hls.attachMedia(video);
+            }
           }
-        } : undefined,
+        } : {}),
         autoplay: true,
         volume: 1,
         theme: '#e50914',
@@ -642,6 +649,19 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   // some platforms deliver (mousedown+up synthesis) into one toggle.
   const lastCcToggleRef = useRef(0);
 
+  // Esc closes the episodes panel first — the capture handler swallows the
+  // keydown so the app-level Esc chain doesn't also tear down the player.
+  useEffect(() => {
+    if (!episodesOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setEpisodesOpen(false);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [episodesOpen]);
+
   // Red tint on the CC control while the subtitle menu is open
   useEffect(() => {
     const el = document.querySelector('.art-control-flux-cc');
@@ -664,7 +684,27 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   ].filter(Boolean).join('  \u2014  ');
 
   const chromeHidden = idle && fullscreen;
-  const style = subs.subsStyle || { scale: 1, bg: 0.7 };
+  const style = subs.subsStyle || { scale: 1, bg: 0 };
+
+  // Classic White (the original repo's default preset): Poppins SemiBold,
+  // white text, black outline drawn as the same 8-direction shadow fan the
+  // Flutter engine uses (borderSize 2.0 → radius 1.6), transparent box.
+  const outlineR = 1.6 * (style.scale || 1);
+  const outlineD = outlineR * 0.7071;
+  const cueStyle = {
+    fontFamily: "'Poppins', sans-serif",
+    fontWeight: 600,
+    color: '#ffffff',
+    fontSize: Math.round(30 * (style.scale || 1)) + 'px',
+    textShadow:
+      `${-outlineR}px 0 0 #000, ${outlineR}px 0 0 #000, 0 ${-outlineR}px 0 #000, 0 ${outlineR}px 0 #000, ` +
+      `${-outlineD}px ${-outlineD}px 0 #000, ${outlineD}px ${-outlineD}px 0 #000, ` +
+      `${-outlineD}px ${outlineD}px 0 #000, ${outlineD}px ${outlineD}px 0 #000`,
+    background: style.bg > 0 ? 'rgba(0, 0, 0, ' + style.bg + ')' : 'transparent'
+  };
+
+  const isSeriesMeta = Boolean(meta && meta.type === 'series');
+  const canBrowseEpisodes = isSeriesMeta && !source.trailer && meta.videos && meta.videos.length > 0;
 
   return (
     <div
@@ -702,7 +742,21 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           <BackIcon />
           <span>Return</span>
         </button>
-        <div className="app-no-drag flex-1 min-w-0">
+        {/* Top-left container — episode name + source. Clicking it opens
+            the title's details; series land on their season with the
+            playing episode scrolled into view (App.openDetailsFromPlayer). */}
+        <div
+          data-testid="player-title-box"
+          title={canBrowseEpisodes || !source.trailer ? 'Open details' : undefined}
+          onClick={onOpenDetails && !source.trailer && meta ? onOpenDetails : undefined}
+          role={onOpenDetails && !source.trailer && meta ? 'button' : undefined}
+          className={
+            'app-no-drag flex-1 min-w-0 rounded-none ' +
+            (onOpenDetails && !source.trailer && meta
+              ? 'cursor-pointer hover:bg-white/[0.06] -mx-2 px-2 py-1 transition-colors'
+              : '')
+          }
+        >
           <div data-testid="player-title" className="text-[15px] font-semibold truncate">{titleText}</div>
           <div data-testid="player-sub" className="text-xs text-dim truncate">{subText}</div>
         </div>
@@ -721,6 +775,27 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm font-semibold text-ink hover:border-accent hover:text-white transition-colors shrink-0"
           >
             <span>Open on YouTube</span>
+          </button>
+        ) : null}
+        {/* Episodes switcher — before Change source (series only). Seasons
+            strip on top, episode list under it, opens on the episode you
+            are watching. */}
+        {canBrowseEpisodes ? (
+          <button
+            data-testid="player-episodes"
+            title="Episodes"
+            aria-label="Episodes"
+            aria-expanded={episodesOpen}
+            onClick={() => setEpisodesOpen((v) => !v)}
+            className={
+              'app-no-drag flex items-center gap-1.5 border bg-raised/80 px-3 py-1.5 text-sm transition-colors shrink-0 ' +
+              (episodesOpen
+                ? 'border-accent text-white'
+                : 'border-edge text-ink hover:border-accent')
+            }
+          >
+            <ListIcon />
+            <span>Episodes</span>
           </button>
         ) : null}
         <button
@@ -763,22 +838,29 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           />
         )}
 
-        {/* subtitle overlay */}
+        {/* subtitle overlay — Poppins Classic White (original-repo look) */}
         {overlayText ? (
           <div
             data-testid="player-sub-overlay"
             className="absolute bottom-[84px] left-0 right-0 flex justify-center px-10 pointer-events-none z-10"
           >
             <span
-              className="max-w-3xl px-4 py-1.5 text-center leading-snug text-white whitespace-pre-line"
-              style={{
-                fontSize: Math.round(18 * style.scale) + 'px',
-                background: 'rgba(0, 0, 0, ' + style.bg + ')'
-              }}
+              className="max-w-3xl px-4 py-1.5 text-center leading-snug whitespace-pre-line"
+              style={cueStyle}
             >
               {overlayText}
             </span>
           </div>
+        ) : null}
+
+        {/* in-player episodes panel */}
+        {episodesOpen && canBrowseEpisodes ? (
+          <PlayerEpisodes
+            meta={meta}
+            episode={episode}
+            onPick={(ep) => { setEpisodesOpen(false); if (onPickEpisode) onPickEpisode(ep); }}
+            onClose={() => setEpisodesOpen(false)}
+          />
         ) : null}
 
         {/* subtitle menu */}
