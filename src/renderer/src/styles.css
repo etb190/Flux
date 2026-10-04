@@ -245,7 +245,15 @@ body {
  * season pill strips, genre chips, episode cards). The arrow sits INSIDE
  * the row as a real flex member — space is built for it, it never moves,
  * and it shares the dark button family of the row it moves. A direction
- * with nothing left dims (still clickable — the click just no-ops). */
+ * with nothing left dims (still clickable — the click just no-ops).
+ *
+ * Height: each call site adds a small vertical margin that exactly cancels
+ * the row's own vertical padding (home rows compensate the hover-shimmy
+ * padding, pill rows the 2px focus padding) so the arrow box ends EXACTLY
+ * at the height of the cards/pills it moves — never taller.
+ * Glyph: the chevron hugs the edge nearest the content it pans towards
+ * (left arrow → right edge of its block), so the visual distance from the
+ * glyph to the first card matches the card-to-card gap. */
 .row-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -267,6 +275,14 @@ body {
   cursor: pointer;
   padding: 0;
   transition: background 0.15s ease, opacity 0.15s ease;
+}
+.h-arrow.dir-left {
+  justify-content: flex-end;
+  padding-right: 2px;
+}
+.h-arrow.dir-right {
+  justify-content: flex-start;
+  padding-left: 2px;
 }
 .h-arrow:hover {
   background: #2a2a2a;

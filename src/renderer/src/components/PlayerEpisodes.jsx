@@ -120,14 +120,16 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
         <>
           {/* Seasons strip — the scroll arrows are members of the pill row
               (pill-styled blocks at each end, space built for them), not
-              floating overlays. The pills pan between the fixed arrows. */}
+              floating overlays. The pills pan between the fixed arrows.
+              my-[2px] cancels the strip's py-0.5 so the arrows are exactly
+              pill-height (36px). */}
           <div className="flex items-center gap-2 px-4 mt-2">
             {stripOverflow ? (
               <button
                 data-testid="pe-season-left"
                 aria-label="Scroll seasons left"
                 onClick={() => pageScroll(-1)}
-                className={'h-arrow shrink-0' + (!canL ? ' dim' : '')}
+                className={'h-arrow dir-left my-[2px] shrink-0' + (!canL ? ' dim' : '')}
               >
                 <ChevronLeftIcon size={16} />
               </button>
@@ -154,7 +156,7 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
                 data-testid="pe-season-right"
                 aria-label="Scroll seasons right"
                 onClick={() => pageScroll(1)}
-                className={'h-arrow shrink-0' + (!canR ? ' dim' : '')}
+                className={'h-arrow dir-right my-[2px] shrink-0' + (!canR ? ' dim' : '')}
               >
                 <ChevronRightIcon size={16} />
               </button>

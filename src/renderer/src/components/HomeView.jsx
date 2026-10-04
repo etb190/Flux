@@ -23,6 +23,9 @@ import {
 // cards), styled in the same dark button family as the rest of the UI. It
 // stays put no matter how many times you click it; when a direction is
 // exhausted it dims (still clickable — clicking just has nothing to move).
+// my-1.5 cancels the scroller's py-2.5/-my-1 hover-shimmy padding so the
+// arrow is EXACTLY as tall as the cards — never taller. The chevron hugs
+// the card-facing edge of its block.
 
 function ArrowBtn({ dir, dim, onClick }) {
   return (
@@ -30,7 +33,11 @@ function ArrowBtn({ dir, dim, onClick }) {
       data-testid={'row-arrow-' + dir}
       aria-label={'Scroll ' + dir}
       onClick={onClick}
-      className={'h-arrow shrink-0' + (dim ? ' dim' : '')}
+      className={
+        'h-arrow my-1.5 shrink-0 ' +
+        (dir === 'left' ? 'dir-left' : 'dir-right') +
+        (dim ? ' dim' : '')
+      }
     >
       {dir === 'left' ? <ChevronLeftIcon size={15} /> : <ChevronRightIcon size={15} />}
     </button>

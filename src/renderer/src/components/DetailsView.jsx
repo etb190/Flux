@@ -72,7 +72,7 @@ function HScroller({ children, testid, scrollerTestid }) {
           data-testid={testid + '-arrow-left'}
           aria-label="Scroll left"
           onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })}
-          className={'h-arrow shrink-0' + (!canLeft ? ' dim' : '')}
+          className={'h-arrow dir-left my-[2px] shrink-0' + (!canLeft ? ' dim' : '')}
         >
           <ChevronLeftIcon size={18} />
         </button>
@@ -89,7 +89,7 @@ function HScroller({ children, testid, scrollerTestid }) {
           data-testid={testid + '-arrow-right'}
           aria-label="Scroll right"
           onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })}
-          className={'h-arrow shrink-0' + (!canRight ? ' dim' : '')}
+          className={'h-arrow dir-right my-[2px] shrink-0' + (!canRight ? ' dim' : '')}
         >
           <ChevronRightIcon size={18} />
         </button>
@@ -518,12 +518,14 @@ export default function DetailsView({
   onPlayTrailer,
   scan = { sources: [], providerCount: 0, summaryText: null, scanError: null },
   onPlaySource,
-  onAutoScan
+  onAutoScan,
+  onResumeEntry
 }) {
   const isSeries = meta.type === 'series';
   const [membership, setMembership] = useState({ watched: false, want: false });
   const [resume, setResume] = useState(null);   // "S2 E5 · 28m left" | "42m left"
   const resumeEpRef = useRef(null);
+  const resumeEntryRef = useRef(null);          // full history entry (source identity)
 
   // List memberships + resume hint (from the Continue watching entry)
   useEffect(() => {
@@ -555,6 +557,7 @@ export default function DetailsView({
             h.positionSec > 5 && !(h.durationSec > 0 &&
               h.positionSec > h.durationSec * 0.95));
           if (!entry) return;
+          resumeEntryRef.current = entry;    // kept for the direct-resume path
           const left = fmtLeft(entry.positionSec, entry.durationSec);
           resumeEpRef.current = isSeries
             ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
@@ -606,6 +609,16 @@ export default function DetailsView({
   }, [isSeries, onAutoScan, meta]);
 
   const playPrimary = () => {
+    // Resume → straight back into the source you were watching, exactly like
+    // the Continue-watching row — no source picker. Entries without a stored
+    // direct source (embeds / legacy) fall back to the sources screen.
+    const entry = resumeEntryRef.current;
+    if (resumeEpRef.current && entry && onResumeEntry &&
+        entry.sourceUrl && entry.sourceFormat &&
+        entry.sourceFormat !== 'Embed') {
+      onResumeEntry(entry);
+      return;
+    }
     if (resumeEpRef.current) {
       onFindSources(resumeEpRef.current);
       return;

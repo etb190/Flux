@@ -370,9 +370,16 @@ export default function App() {
       return;
     }
     // Resumed playback backed by meta + episode → back opens the source
-    // list for this title (fresh scan) instead of dropping to home
+    // list for this title (fresh scan) instead of dropping to home — but
+    // only when the resume came from the home Continue-watching row. When
+    // the details page is mounted behind the player (resume clicked on
+    // details), closing just drops back onto it.
     const entry = resumeEntryRef.current;
     if (entry && meta && meta.id === entry.imdbId) {
+      if (viewRef.current === 'details') {
+        resumeEntryRef.current = null;
+        return;
+      }
       openSources(entry.type === 'series'
         ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
         : { title: meta.name, season: 1, episode: 1 });
@@ -577,6 +584,7 @@ export default function App() {
                   onPlaySource={openPlayer}
                   onAutoScan={ensureMovieScan}
                   onPlayTrailer={openTrailer}
+                  onResumeEntry={resumeHistory}
                 />
               ) : null}
 
