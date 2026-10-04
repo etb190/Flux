@@ -1,9 +1,10 @@
-/* ── For You screen — stacked "Because you watched X" rows ────────────────
+/* ── For You screen — stacked suggestion rows, one per watched title ──────
  * The home page used to carry a single suggestion row; this screen expands
  * the idea: one TMDB recommendations row per title you've watched (most
  * recent first, up to 20). Rows load independently — a title whose lookup
  * fails never blocks the rest. Cards open details through the shared
  * TMDB→IMDb bridge, exactly like the old home suggestion cards.
+ * No page header — the sidebar marks the active tab, rows start right away.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -100,22 +101,13 @@ export default function RecommendationsView({ active, onOpen }) {
 
   return (
     <div data-testid="recs-view" className="min-h-full">
-      <div className="flex items-end justify-between flex-wrap gap-2 mt-1 mb-1">
-        <div>
-          <h1 data-testid="recs-title" className="text-xl font-bold text-white flex items-center gap-2.5">
-            <span className="text-accent"><SparkGlyph /></span>
-            For You
-          </h1>
-          <p className="text-xs text-muted mt-0.5">
-            Because you watched — a row of picks for everything you&rsquo;ve watched
-          </p>
-        </div>
-        {notice ? (
-          <span data-testid="recs-notice" className="text-xs px-3 py-1 bg-gold/10 text-gold border border-gold/40">
+      {notice ? (
+        <div className="mt-1 mb-1">
+          <span data-testid="recs-notice" className="inline-block text-xs px-3 py-1 bg-gold/10 text-gold border border-gold/40">
             {notice}
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {loading ? (
         <RecsSkeleton />
@@ -149,14 +141,5 @@ export default function RecommendationsView({ active, onOpen }) {
         </div>
       )}
     </div>
-  );
-}
-
-/* Tiny inline sparkle so the header matches the sidebar icon */
-function SparkGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden="true">
-      <path fill="currentColor" d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25z" />
-    </svg>
   );
 }

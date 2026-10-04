@@ -1,10 +1,15 @@
 /* ── Player episodes sidebar (in-player episode switcher) ──────────────────
  * Concept ported from the original repo's player_episodes_panel.dart: a
- * seasons strip on top (arrow-scrollable, auto-centered on the season you
- * are watching) with the episode list stacked underneath (scrolls up and
- * down, auto-scrolled to the episode you are watching). The styling is
- * Flux's own — black surface, zero radius, red accent. Picking an episode
- * hands it to the app, which drops you on its sources screen.
+ * seasons strip on top (auto-centered on the season you are watching) with
+ * the episode list stacked underneath (scrolls up and down, auto-scrolled to
+ * the episode you are watching). The styling is Flux's own — black surface,
+ * zero radius, red accent. Picking an episode hands it to the app, which
+ * drops you on its sources screen.
+ *
+ * Season arrows: row members, not overlays — they sit INSIDE the strip as
+ * pill-styled blocks at each end (same #1c1c1c family as the pills, same
+ * gap as between pills), with real space built for them. They never move,
+ * however many times you click; a direction with nothing left just dims.
  *
  * Layout: a right-hand drawer, double the width of the nav rail (392px).
  * It slides in from the right and slides back out to the right; clicking
@@ -13,7 +18,7 @@
  * open/close transition can always play out.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildSeasonTabs } from '../lib/format.js';
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from './icons.jsx';
 
@@ -36,6 +41,9 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
 
   const seasonsRef = useRef(null);    // scrollable season pill strip
   const activeRowRef = useRef(null);  // the currently-playing episode row
+  const [stripOverflow, setStripOverflow] = useState(false);
+  const [canL, setCanL] = useState(false);
+  const [canR, setCanR] = useState(false);
 
   const tab = seasonTabs[tabIdx] || seasonTabs[0];
   const isCurrent = (v) => episode &&
@@ -66,6 +74,29 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
     el.scrollBy({ left: dir * Math.max(el.clientWidth * 0.8, 200), behavior: 'smooth' });
   };
 
+  // Track strip overflow + edge position → arrows show/hide and dim.
+  const syncStrip = useCallback(() => {
+    const el = seasonsRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setStripOverflow(max > 4);
+    setCanL(el.scrollLeft > 4);
+    setCanR(el.scrollLeft < max - 4);
+  }, []);
+
+  useEffect(() => {
+    syncStrip();
+    const el = seasonsRef.current;
+    if (!el) return undefined;
+    el.addEventListener('scroll', syncStrip, { passive: true });
+    const ro = new ResizeObserver(syncStrip);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', syncStrip);
+      ro.disconnect();
+    };
+  }, [syncStrip, seasonTabs, tabIdx]);
+
   return (
     <div
       data-testid="player-episodes-panel"
@@ -87,12 +118,24 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
         </div>
       ) : (
         <>
-          {/* Seasons strip — arrows scroll it left / right */}
-          <div className="relative px-4 mt-2">
+          {/* Seasons strip — the scroll arrows are members of the pill row
+              (pill-styled blocks at each end, space built for them), not
+              floating overlays. The pills pan between the fixed arrows. */}
+          <div className="flex items-center gap-2 px-4 mt-2">
+            {stripOverflow ? (
+              <button
+                data-testid="pe-season-left"
+                aria-label="Scroll seasons left"
+                onClick={() => pageScroll(-1)}
+                className={'h-arrow shrink-0' + (!canL ? ' dim' : '')}
+              >
+                <ChevronLeftIcon size={16} />
+              </button>
+            ) : null}
             <div
               ref={seasonsRef}
               data-testid="pe-season-row"
-              className="epi-scroll flex gap-2 overflow-x-auto py-0.5 scroll-dark"
+              className="epi-scroll flex gap-2 overflow-x-auto py-0.5 scroll-dark min-w-0 flex-1"
             >
               {seasonTabs.map((t, idx) => (
                 <button
@@ -106,22 +149,16 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
                 </button>
               ))}
             </div>
-            <button
-              data-testid="pe-season-left"
-              aria-label="Scroll seasons left"
-              onClick={() => pageScroll(-1)}
-              className="epi-arrow epi-arrow-left"
-            >
-              <ChevronLeftIcon size={16} />
-            </button>
-            <button
-              data-testid="pe-season-right"
-              aria-label="Scroll seasons right"
-              onClick={() => pageScroll(1)}
-              className="epi-arrow epi-arrow-right"
-            >
-              <ChevronRightIcon size={16} />
-            </button>
+            {stripOverflow ? (
+              <button
+                data-testid="pe-season-right"
+                aria-label="Scroll seasons right"
+                onClick={() => pageScroll(1)}
+                className={'h-arrow shrink-0' + (!canR ? ' dim' : '')}
+              >
+                <ChevronRightIcon size={16} />
+              </button>
+            ) : null}
           </div>
 
           {/* Episodes — stacked vertically, scrolls up / down */}

@@ -17,16 +17,20 @@ import {
   ChevronLeftIcon, ChevronRightIcon, CloseIcon
 } from './icons.jsx';
 
-// ── Carousel row with arrow buttons (no scrollbar) ───────────────────────
+// ── Carousel row: arrows are row members ──────────────────────────────────
+// No floating overlay / header gadgets — each arrow is a fixed block at its
+// end of the row, with real space built for it (same 3px gap as between
+// cards), styled in the same dark button family as the rest of the UI. It
+// stays put no matter how many times you click it; when a direction is
+// exhausted it dims (still clickable — clicking just has nothing to move).
 
-function ArrowBtn({ dir, disabled, onClick }) {
+function ArrowBtn({ dir, dim, onClick }) {
   return (
     <button
       data-testid={'row-arrow-' + dir}
       aria-label={'Scroll ' + dir}
-      disabled={disabled}
       onClick={onClick}
-      className="row-arrow"
+      className={'h-arrow shrink-0' + (dim ? ' dim' : '')}
     >
       {dir === 'left' ? <ChevronLeftIcon size={15} /> : <ChevronRightIcon size={15} />}
     </button>
@@ -71,19 +75,19 @@ export function CarouselRow({ title, children, testid, first }) {
 
   return (
     <section data-testid={testid || 'home-row'} className={first ? 'mt-3' : 'mt-6'}>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-[13.5px] font-semibold tracking-wide text-[#ededed]">{title}</h2>
-        {noScroll ? null : (
-          <div className="flex gap-1.5">
-            <ArrowBtn dir="left" disabled={!canLeft}
-              onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })} />
-            <ArrowBtn dir="right" disabled={!canRight}
-              onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })} />
-          </div>
-        )}
-      </div>
-      <div ref={scrollerRef} className="row-scroll flex gap-[3px] py-2.5 -my-1 overflow-x-auto -mx-1 px-1">
-        {children}
+      <h2 className="text-[13.5px] font-semibold tracking-wide text-[#ededed] mb-2">{title}</h2>
+      <div className="flex items-stretch gap-[3px]">
+        {!noScroll ? (
+          <ArrowBtn dir="left" dim={!canLeft}
+            onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })} />
+        ) : null}
+        <div ref={scrollerRef} className="row-scroll flex gap-[3px] py-2.5 -my-1 overflow-x-auto min-w-0 flex-1">
+          {children}
+        </div>
+        {!noScroll ? (
+          <ArrowBtn dir="right" dim={!canRight}
+            onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })} />
+        ) : null}
       </div>
     </section>
   );

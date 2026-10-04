@@ -7,6 +7,11 @@
  * flex-1/min-h-full chain let the overflow-hidden hero shrink to 0px on
  * long pages, which pushed the storyline visually above the hero — fixed
  * by keeping the page in normal document flow inside the scrollable main.
+ *
+ * Scroll arrows: row members, not overlays — each arrow is a fixed block at
+ * its end of the row with real space built for it (same gap as between
+ * cards/pills), styled in the same dark family; a direction with nothing
+ * left dims but stays clickable.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,17 +28,19 @@ function matchPct(rating) {
   return Number.isFinite(n) && n > 0 && n <= 10 ? Math.round(n * 10) : null;
 }
 
-/* ── Horizontal scroller row with edge arrows (seasons / episodes) ──────── */
+/* ── Horizontal scroller row (seasons / episodes): row-member arrows ────── */
 
 function HScroller({ children, testid, scrollerTestid }) {
   const scrollerRef = useRef(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
+  const [noScroll, setNoScroll] = useState(true);
 
   const sync = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const max = el.scrollWidth - el.clientWidth;
+    setNoScroll(max <= 4);
     setCanLeft(el.scrollLeft > 4);
     setCanRight(el.scrollLeft < max - 4);
   }, []);
@@ -59,32 +66,34 @@ function HScroller({ children, testid, scrollerTestid }) {
     Math.max((scrollerRef.current ? scrollerRef.current.clientWidth : 600) * 0.8, 280);
 
   return (
-    <div data-testid={testid} className="relative">
+    <div data-testid={testid} className="flex items-center gap-[3px]">
+      {!noScroll ? (
+        <button
+          data-testid={testid + '-arrow-left'}
+          aria-label="Scroll left"
+          onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })}
+          className={'h-arrow shrink-0' + (!canLeft ? ' dim' : '')}
+        >
+          <ChevronLeftIcon size={18} />
+        </button>
+      ) : null}
       <div
         ref={scrollerRef}
         data-testid={scrollerTestid}
-        className="epi-scroll flex gap-[3px] overflow-x-auto py-0.5 px-8 -mx-8"
+        className="epi-scroll flex gap-[3px] overflow-x-auto py-0.5 min-w-0 flex-1"
       >
         {children}
       </div>
-      <button
-        data-testid={testid + '-arrow-left'}
-        aria-label="Scroll left"
-        disabled={!canLeft}
-        onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })}
-        className="epi-arrow epi-arrow-left"
-      >
-        <ChevronLeftIcon size={20} />
-      </button>
-      <button
-        data-testid={testid + '-arrow-right'}
-        aria-label="Scroll right"
-        disabled={!canRight}
-        onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })}
-        className="epi-arrow epi-arrow-right"
-      >
-        <ChevronRightIcon size={20} />
-      </button>
+      {!noScroll ? (
+        <button
+          data-testid={testid + '-arrow-right'}
+          aria-label="Scroll right"
+          onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })}
+          className={'h-arrow shrink-0' + (!canRight ? ' dim' : '')}
+        >
+          <ChevronRightIcon size={18} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -468,7 +477,7 @@ function Episodes({ meta, onFindSources, highlight }) {
     <section data-testid="details-episodes" className="flex flex-col gap-2">
       <h2 className="text-xl font-bold text-white tracking-wide">Episodes</h2>
 
-      {/* Season buttons — one line, scrollable with edge arrows */}
+      {/* Season buttons — one line, pan between the fixed row-member arrows */}
       <HScroller testid="season-row" scrollerTestid="season-scroll">
         {seasonTabs.map((t, idx) => (
           <button
@@ -483,8 +492,9 @@ function Episodes({ meta, onFindSources, highlight }) {
         ))}
       </HScroller>
 
-      {/* Episode cards — one line, scrollable with edge arrows. The row is
-          keyed by season so switching seasons snaps back to the start. */}
+      {/* Episode cards — one line, pan between the fixed row-member arrows.
+          The row is keyed by season so switching seasons snaps back to the
+          start. */}
       <HScroller key={currentTab} testid="episodes-row" scrollerTestid="episodes-scroll">
         {tab.episodes.map((ep, i) => (
           <EpisodeCard

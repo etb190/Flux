@@ -183,24 +183,13 @@ export default function WatchedView({ list = 'watched', onOpen }) {
         </div>
       ) : null}
 
-      <div className="flex items-baseline gap-2.5 mt-7 mb-3">
-        <h3 className="text-[15.5px] font-bold">Your list</h3>
-        {items.length ? (
-          <span className="text-[12.5px] text-muted">
-            {items.length} {items.length === 1 ? 'title' : 'titles'}
-          </span>
-        ) : null}
-      </div>
       {items.length ? (
         sections.map((section) => (
           <section key={section.key} className="pb-2">
-            <div className="flex items-baseline gap-2.5 mt-2 mb-3">
+            <div className="mt-4 mb-3">
               <h3 data-testid={'watched-section-' + section.key} className="text-[15.5px] font-bold">
                 {section.label}
               </h3>
-              <span className="text-[12.5px] text-muted">
-                {section.rows.length} {section.rows.length === 1 ? 'title' : 'titles'}
-              </span>
             </div>
             <div data-testid="watched-grid" className="grid grid-cols-[repeat(auto-fill,138px)] gap-4 pb-4">
               {section.rows.map((entry) => (

@@ -240,7 +240,12 @@ body {
   color: rgba(255, 255, 255, 0.62);
 }
 
-/* ── Home carousel rows: arrows replace the horizontal scrollbar ───────── */
+/* ── Scroller rows: arrows are row members, not overlays ──────────────────
+ * One universal arrow style for every panning row (home/recs carousels,
+ * season pill strips, genre chips, episode cards). The arrow sits INSIDE
+ * the row as a real flex member — space is built for it, it never moves,
+ * and it shares the dark button family of the row it moves. A direction
+ * with nothing left dims (still clickable — the click just no-ops). */
 .row-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -249,27 +254,25 @@ body {
   display: none;
 }
 
-.row-arrow {
-  width: 28px;
-  height: 28px;
+.h-arrow {
+  width: 32px;
+  flex: 0 0 32px;
+  align-self: stretch;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-dim);
-  background: var(--color-raised);
-  border: 1px solid var(--color-edge);
+  color: #fff;
+  background: #1c1c1c;
+  border: none;
   cursor: pointer;
   padding: 0;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
-.row-arrow:hover:not(:disabled) {
-  color: #fff;
-  border-color: #3d3d3d;
-  background: var(--color-hover);
+.h-arrow:hover {
+  background: #2a2a2a;
 }
-.row-arrow:disabled {
-  opacity: 0.3;
-  pointer-events: none;
+.h-arrow.dim {
+  opacity: 0.4;
 }
 
 /* Continue-watching card: S/E badge (top-left) + remove button (top-right,
@@ -416,35 +419,6 @@ body {
 .epi-scroll::-webkit-scrollbar {
   display: none;
 }
-.epi-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  cursor: pointer;
-  padding: 0;
-  backdrop-filter: blur(4px);
-  transition: background 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
-}
-.epi-arrow:hover:not(:disabled) {
-  background: var(--color-accent);
-  border-color: transparent;
-}
-.epi-arrow:disabled {
-  opacity: 0;
-  pointer-events: none;
-}
-.epi-arrow-left { left: -8px; }
-.epi-arrow-right { right: -8px; }
-
 /* Season pill buttons — one line, uniform height */
 .season-pill {
   height: 36px;
@@ -474,7 +448,7 @@ body {
   background: #f6121d;
 }
 
-/* ── Discover: genre chips (season-pill family, smaller) + edge arrows ──── */
+/* ── Discover: genre chips (season-pill family, smaller) ─────────────────── */
 .genre-pill {
   height: 30px;
   padding: 0 14px;
@@ -502,30 +476,6 @@ body {
 .genre-pill.active:hover {
   background: #f6121d;
 }
-.chip-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 5;
-  width: 26px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-dim);
-  background: rgba(18, 18, 18, 0.92);
-  border: 1px solid var(--color-edge);
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.chip-arrow:hover {
-  color: #fff;
-  background: var(--color-hover);
-  border-color: #3d3d3d;
-}
-.chip-arrow.left { left: -6px; }
-.chip-arrow.right { right: 8px; }
 
 /* ── Artplayer custom controls (CC + fullscreen): same size as the built-ins,
    sitting at the FAR RIGHT of the control bar, red tint while active ────── */

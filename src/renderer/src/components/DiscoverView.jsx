@@ -47,16 +47,18 @@ function loadSavedFilters() {
 // Module-scope snapshot (survives unmount/remount of this component only).
 let memo = null;
 
-// ── Genre chips row (horizontal scroll, edge arrows when it overflows) ───
+// ── Genre chips row: chips pan between fixed row-member arrows ───────────
 function ChipsRow({ children, testid }) {
   const ref = useRef(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
+  const [noScroll, setNoScroll] = useState(true);
 
   const sync = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     const max = el.scrollWidth - el.clientWidth;
+    setNoScroll(max <= 4);
     setCanLeft(el.scrollLeft > 4);
     setCanRight(el.scrollLeft < max - 4);
   }, []);
@@ -76,18 +78,20 @@ function ChipsRow({ children, testid }) {
     Math.max((ref.current ? ref.current.clientWidth : 500) * 0.8, 260);
 
   return (
-    <div className="relative">
-      <div ref={ref} data-testid={testid} className="row-scroll flex gap-1.5 overflow-x-auto py-0.5 pr-6">
-        {children}
-      </div>
-      {canLeft ? (
-        <button data-testid="disc-chips-left" aria-label="Scroll genres left" className="chip-arrow left"
+    <div className="flex items-center gap-1.5">
+      {!noScroll ? (
+        <button data-testid="disc-chips-left" aria-label="Scroll genres left"
+          className={'h-arrow shrink-0' + (!canLeft ? ' dim' : '')}
           onClick={() => ref.current?.scrollBy({ left: -page(), behavior: 'smooth' })}>
           <ChevronLeftIcon size={14} />
         </button>
       ) : null}
-      {canRight ? (
-        <button data-testid="disc-chips-right" aria-label="Scroll genres right" className="chip-arrow right"
+      <div ref={ref} data-testid={testid} className="row-scroll flex gap-1.5 overflow-x-auto py-0.5 min-w-0 flex-1">
+        {children}
+      </div>
+      {!noScroll ? (
+        <button data-testid="disc-chips-right" aria-label="Scroll genres right"
+          className={'h-arrow shrink-0' + (!canRight ? ' dim' : '')}
           onClick={() => ref.current?.scrollBy({ left: page(), behavior: 'smooth' })}>
           <ChevronRightIcon size={14} />
         </button>
