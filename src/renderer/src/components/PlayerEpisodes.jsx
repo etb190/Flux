@@ -129,7 +129,7 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
                 data-testid="pe-season-left"
                 aria-label="Scroll seasons left"
                 onClick={() => pageScroll(-1)}
-                className={'h-arrow dir-left my-[2px] shrink-0' + (!canL ? ' dim' : '')}
+                className={'h-arrow my-[2px] shrink-0' + (!canL ? ' dim' : '')}
               >
                 <ChevronLeftIcon size={16} />
               </button>
@@ -156,7 +156,7 @@ export default function PlayerEpisodes({ open, meta, episode, onPick, onClose })
                 data-testid="pe-season-right"
                 aria-label="Scroll seasons right"
                 onClick={() => pageScroll(1)}
-                className={'h-arrow dir-right my-[2px] shrink-0' + (!canR ? ' dim' : '')}
+                className={'h-arrow my-[2px] shrink-0' + (!canR ? ' dim' : '')}
               >
                 <ChevronRightIcon size={16} />
               </button>

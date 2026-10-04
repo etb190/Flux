@@ -262,9 +262,13 @@ body {
   display: none;
 }
 
+/* Slim row-member arrow: a narrow dark block exactly as tall as the cards
+   it moves (call sites cancel each row's vertical padding via negative
+   margins), chevron dead-center both ways. 20px wide keeps the glyph
+   ~2-3px from the block edge, so glyph-to-card distance ≈ the card gap. */
 .h-arrow {
-  width: 32px;
-  flex: 0 0 32px;
+  width: 20px;
+  flex: 0 0 20px;
   align-self: stretch;
   display: flex;
   align-items: center;
@@ -275,14 +279,6 @@ body {
   cursor: pointer;
   padding: 0;
   transition: background 0.15s ease, opacity 0.15s ease;
-}
-.h-arrow.dir-left {
-  justify-content: flex-end;
-  padding-right: 2px;
-}
-.h-arrow.dir-right {
-  justify-content: flex-start;
-  padding-left: 2px;
 }
 .h-arrow:hover {
   background: #2a2a2a;

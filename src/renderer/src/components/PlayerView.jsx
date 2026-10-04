@@ -777,36 +777,40 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             <span>Open on YouTube</span>
           </button>
         ) : null}
-        {/* Episodes switcher — before Change source (series only). Seasons
-            strip on top, episode list under it, opens on the episode you
-            are watching. */}
-        {canBrowseEpisodes ? (
+        {/* Episodes + Change source form one tight cluster (gap-2 inside vs
+            the top bar's uniform gap-4): related controls belong visually
+            together instead of floating 16px apart. Series only for Episodes —
+            seasons strip on top, episode list under it, opens on the episode
+            you are watching. */}
+        <div className="flex items-center gap-2 shrink-0">
+          {canBrowseEpisodes ? (
+            <button
+              data-testid="player-episodes"
+              title="Episodes"
+              aria-label="Episodes"
+              aria-expanded={episodesOpen}
+              onClick={() => setEpisodesOpen((v) => !v)}
+              className={
+                'app-no-drag flex items-center gap-1.5 border bg-raised/80 px-3 py-1.5 text-sm transition-colors shrink-0 ' +
+                (episodesOpen
+                  ? 'border-accent text-white'
+                  : 'border-edge text-ink hover:border-accent')
+              }
+            >
+              <ListIcon />
+              <span>Episodes</span>
+            </button>
+          ) : null}
           <button
-            data-testid="player-episodes"
-            title="Episodes"
-            aria-label="Episodes"
-            aria-expanded={episodesOpen}
-            onClick={() => setEpisodesOpen((v) => !v)}
-            className={
-              'app-no-drag flex items-center gap-1.5 border bg-raised/80 px-3 py-1.5 text-sm transition-colors shrink-0 ' +
-              (episodesOpen
-                ? 'border-accent text-white'
-                : 'border-edge text-ink hover:border-accent')
-            }
+            data-testid="player-switch"
+            title="Pick a different source"
+            onClick={onBack}
+            className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
           >
-            <ListIcon />
-            <span>Episodes</span>
+            <SwitchIcon />
+            <span>Change source</span>
           </button>
-        ) : null}
-        <button
-          data-testid="player-switch"
-          title="Pick a different source"
-          onClick={onBack}
-          className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
-        >
-          <SwitchIcon />
-          <span>Change source</span>
-        </button>
+        </div>
         <PlayerWindowControls />
       </div>
 

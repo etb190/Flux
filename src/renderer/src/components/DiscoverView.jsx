@@ -81,7 +81,7 @@ function ChipsRow({ children, testid }) {
     <div className="flex items-center gap-1.5">
       {!noScroll ? (
         <button data-testid="disc-chips-left" aria-label="Scroll genres left"
-          className={'h-arrow dir-left my-[2px] shrink-0' + (!canLeft ? ' dim' : '')}
+          className={'h-arrow my-[2px] shrink-0' + (!canLeft ? ' dim' : '')}
           onClick={() => ref.current?.scrollBy({ left: -page(), behavior: 'smooth' })}>
           <ChevronLeftIcon size={14} />
         </button>
@@ -91,7 +91,7 @@ function ChipsRow({ children, testid }) {
       </div>
       {!noScroll ? (
         <button data-testid="disc-chips-right" aria-label="Scroll genres right"
-          className={'h-arrow dir-right my-[2px] shrink-0' + (!canRight ? ' dim' : '')}
+          className={'h-arrow my-[2px] shrink-0' + (!canRight ? ' dim' : '')}
           onClick={() => ref.current?.scrollBy({ left: page(), behavior: 'smooth' })}>
           <ChevronRightIcon size={14} />
         </button>

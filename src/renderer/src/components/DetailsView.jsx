@@ -72,9 +72,9 @@ function HScroller({ children, testid, scrollerTestid }) {
           data-testid={testid + '-arrow-left'}
           aria-label="Scroll left"
           onClick={() => scrollerRef.current?.scrollBy({ left: -page(), behavior: 'smooth' })}
-          className={'h-arrow dir-left my-[2px] shrink-0' + (!canLeft ? ' dim' : '')}
+          className={'h-arrow my-[2px] shrink-0' + (!canLeft ? ' dim' : '')}
         >
-          <ChevronLeftIcon size={18} />
+          <ChevronLeftIcon size={16} />
         </button>
       ) : null}
       <div
@@ -89,9 +89,9 @@ function HScroller({ children, testid, scrollerTestid }) {
           data-testid={testid + '-arrow-right'}
           aria-label="Scroll right"
           onClick={() => scrollerRef.current?.scrollBy({ left: page(), behavior: 'smooth' })}
-          className={'h-arrow dir-right my-[2px] shrink-0' + (!canRight ? ' dim' : '')}
+          className={'h-arrow my-[2px] shrink-0' + (!canRight ? ' dim' : '')}
         >
-          <ChevronRightIcon size={18} />
+          <ChevronRightIcon size={16} />
         </button>
       ) : null}
     </div>
