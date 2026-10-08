@@ -187,6 +187,19 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     const paused = typeof pausedOverride === 'boolean'
       ? pausedOverride
       : Boolean(v.paused);
+    // Series: the LARGE presence image is the EPISODE'S OWN banner (Cinemeta
+    // videos[].thumbnail, e.g. episodes.metahub.space/tt…/S/E/w780.jpg), not
+    // the whole-show backdrop; show art is only the fallback. Movies keep
+    // the show backdrop.
+    let posterUrl = (meta && (meta.background || meta.poster)) || null;
+    if (isSeries) {
+      const epMeta = Array.isArray(meta && meta.videos) && episode
+        ? meta.videos.find((vid) =>
+            (vid.season ?? 1) === (episode.season ?? 1) &&
+            (vid.episode ?? 1) === (episode.episode ?? 1))
+        : null;
+      if (epMeta && epMeta.thumbnail) posterUrl = epMeta.thumbnail;
+    }
     api.discordSet({
       kind: isSeries ? 'series' : 'movie',
       title,
@@ -194,7 +207,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       season: isSeries && episode ? (episode.season ?? 1) : null,
       episode: isSeries && episode ? (episode.episode ?? 1) : null,
       episodeTitle: isSeries && episode ? (episode.title || '') : null,
-      posterUrl: (meta && (meta.background || meta.poster)) || null,
+      posterUrl,
       positionSec: Number.isFinite(v.currentTime) ? Math.floor(v.currentTime) : null,
       durationSec: Number.isFinite(v.duration) && v.duration > 0 ? Math.floor(v.duration) : null,
       paused

@@ -26,21 +26,30 @@
 // the application's public key is stored next to it for reference — plain
 // Rich Presence only ever needs the application id.
 //
+// Art assets are EXTERNAL IMAGE URLs (the app logo lives on the repo, the
+// media art comes from Cinemeta) — Discord's image proxy fetches them at
+// render time, so nothing has to be uploaded to the application portal.
+// (Portal-uploaded assets were the v0.25-and-earlier approach; the 'logo'
+// asset never actually existed on the portal, which is why the small icon
+// silently never rendered — an unknown asset key renders as nothing.)
+//
 // Everything is guarded: if Discord isn't running the pipe connect fails
 // and every call becomes a silent no-op, exactly like Helix's debugPrint.
 
 const { Client } = require('@xhayper/discord-rpc');
 
 // Discord Application (branded "Netflix" — the netflix-style one)
-const DISCORD_APP_ID = '1556017689758007427';
+const DISCORD_APP_ID = '1557628426402271323';
 // Application public key (only needed for OAuth2 token verification /
 // join flows — NOT for Rich Presence; kept here for reference).
 const DISCORD_PUBLIC_KEY =
-  '6f9abda0f2852d72db10aa459d7227810f3edf33f9956bcbb680af4406a0c3d5';
+  '5ceebfd2caf3c033c5413badc1e4b8d86f583b7554909bab50c0ea8da34d3127';
 
-// Activity asset uploaded on the Discord application portal. If the asset
-// does not exist Discord simply renders no image — never an error.
-const LOGO_KEY = 'logo';
+// App logo as an EXTERNAL image URL (512x512 PNG, min is 64x64): Discord's
+// image proxy fetches it at render time, so the small icon works with zero
+// portal-side asset uploads on any application id.
+const LOGO_IMAGE =
+  'https://raw.githubusercontent.com/etb190/Flux/main/assets/icon.png';
 
 // discord-api-types ActivityType: 0 = PLAYING, 3 = WATCHING
 const TYPE_PLAYING = 0;
@@ -81,14 +90,16 @@ function buildLargeImage(posterUrl, imageText) {
   if (poster && /^https?:\/\//i.test(poster)) {
     return { key: poster, text: imageText || undefined };
   }
-  return { key: LOGO_KEY, text: APP_NAME };
+  return { key: LOGO_IMAGE, text: APP_NAME };
 }
 
 function buildIdlePresence(startedAt) {
   return {
     activityType: TYPE_PLAYING,
     details: 'Browsing ' + APP_NAME,
-    largeImage: { key: LOGO_KEY, text: APP_NAME },
+    // Browsing: logo as the LARGE image, NO small icon (small icon is a
+    // "watching something" badge only).
+    largeImage: { key: LOGO_IMAGE, text: APP_NAME },
     timestamps: { startTimestamp: startedAt instanceof Date ? startedAt : new Date(startedAt) }
   };
 }
@@ -102,11 +113,16 @@ function buildMoviePresence({ title, year, posterUrl, positionSec, durationSec, 
     // Helix: "(2021)" while watching, "In Netflix" without a year
     state: cleanYear ? '(' + cleanYear + ')' : 'In ' + APP_NAME,
     largeImage: buildLargeImage(posterUrl, cleanTitle),
-    smallImage: { key: LOGO_KEY, text: APP_NAME },
+    // Watching badge: the app logo, bottom-right of the media art. Must be
+    // an http(s) URL — portal asset keys only render if uploaded by hand.
+    smallImage: { key: LOGO_IMAGE, text: APP_NAME },
     timestamps: buildTimestamps({ now, positionSec, durationSec, paused })
   };
 }
 
+// posterUrl for series is the EPISODE'S OWN banner (the renderer resolves
+// videos[].thumbnail for the playing episode and falls back to show art) —
+// the presence shows what you are actually looking at, not the show card.
 function buildSeriesPresence({ title, season, episode, episodeTitle, posterUrl, positionSec, durationSec, paused, now }) {
   const cleanTitle = String(title || '').trim() || APP_NAME;
   const s = Number.isFinite(Number(season)) && Number(season) > 0 ? Math.floor(Number(season)) : 1;
@@ -119,7 +135,9 @@ function buildSeriesPresence({ title, season, episode, episodeTitle, posterUrl, 
     details: 'Watching ' + cleanTitle,
     state: stateText,
     largeImage: buildLargeImage(posterUrl, cleanTitle),
-    smallImage: { key: LOGO_KEY, text: APP_NAME },
+    // Watching badge: the app logo, bottom-right of the media art. Must be
+    // an http(s) URL — portal asset keys only render if uploaded by hand.
+    smallImage: { key: LOGO_IMAGE, text: APP_NAME },
     timestamps: buildTimestamps({ now, positionSec, durationSec, paused })
   };
 }
@@ -357,7 +375,7 @@ function createDiscordService(options) {
 module.exports = {
   DISCORD_APP_ID,
   DISCORD_PUBLIC_KEY,
-  LOGO_KEY,
+  LOGO_IMAGE,
   TYPE_PLAYING,
   TYPE_WATCHING,
   buildTimestamps,
