@@ -51,6 +51,11 @@ export default function App() {
 
   // mirrors for the stable Esc handler
   const viewRef = useRef(view);
+  // Where the current playback session started — the home Continue-watching
+  // row, the details page, or its source list. The player's Return goes
+  // back there (never to the sources list); "Change source" is the
+  // deliberate path to the source list.
+  const playOriginRef = useRef('details');
   const activeSourceRef = useRef(activeSource);
   const submenuOpenRef = useRef(submenuOpen);
   const homeTabRef = useRef(homeTab);
@@ -242,6 +247,7 @@ export default function App() {
     setActiveSource(src);
     resumeEntryRef.current = null;           // fresh playback, not a resume
     setResumeSec(0);
+    playOriginRef.current = 'details';       // sources/details play origin
 
     // Continue watching: record this playback in the history (one entry per
     // title; series entries carry the season/episode, the episode still,
@@ -288,6 +294,7 @@ export default function App() {
     streams.stopScan();
     scanTargetRef.current = null;            // returning restarts the movie scan
     resumeEntryRef.current = null;
+    playOriginRef.current = 'details';
     setResumeSec(0);
     let url = null;
     const api = typeof window !== 'undefined' ? window.fluxAPI : null;
@@ -360,32 +367,6 @@ export default function App() {
       .catch(() => {});
   }, [openDetails, streams]);
 
-  const closePlayer = useCallback(() => {
-    setSubmenuOpen(false);
-    const src = activeSourceRef.current;
-    setActiveSource(null);
-    // Trailer session → straight back to the details screen
-    if (src && src.trailer) {
-      setView('details');
-      return;
-    }
-    // Resumed playback backed by meta + episode → back opens the source
-    // list for this title (fresh scan) instead of dropping to home — but
-    // only when the resume came from the home Continue-watching row. When
-    // the details page is mounted behind the player (resume clicked on
-    // details), closing just drops back onto it.
-    const entry = resumeEntryRef.current;
-    if (entry && meta && meta.id === entry.imdbId) {
-      if (viewRef.current === 'details') {
-        resumeEntryRef.current = null;
-        return;
-      }
-      openSources(entry.type === 'series'
-        ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
-        : { title: meta.name, season: 1, episode: 1 });
-    }
-  }, [meta, openSources]);
-
   // ── player episodes panel → play a different episode ───────────────────
   // Drops the playback overlay and lands on the picked episode's source
   // list (openSources reuses a matching running scan; otherwise rescans).
@@ -395,6 +376,19 @@ export default function App() {
     resumeEntryRef.current = null;             // the resume entry is stale now
     openSources(ep);
   }, [openSources]);
+
+  // ── player "Change source" → the sources list for what's playing ──────
+  // Deliberately separate from Return: switching source re-opens the scan
+  // for the playing title/episode; Return never lands here anymore.
+  const changeSourceFromPlayer = useCallback(() => {
+    setSubmenuOpen(false);
+    setActiveSource(null);
+    resumeEntryRef.current = null;
+    if (!meta) return;
+    openSources(meta.type === 'series' && episode
+      ? episode
+      : { title: meta.name, season: 1, episode: 1 });
+  }, [meta, episode, openSources]);
 
   // ── player top-left container → the title's details page ───────────────
   // Uses the meta already loaded for playback (no refetch). Series land on
@@ -410,9 +404,44 @@ export default function App() {
     setDetailsHighlight(m.type === 'series' && episode
       ? { season: episode.season ?? 1, episode: episode.episode ?? 1 }
       : null);
+    // Keep the details Back target when the page is already mounted behind
+    // the player (resume/return flows); fresh opens default to home.
+    if (viewRef.current !== 'details') detailsReturnRef.current = 'home';
     if (m.type === 'movie') ensureMovieScan(m);
     setView('details');
   }, [meta, episode, ensureMovieScan]);
+
+  // ── player Return / Esc → back to where watching started ──────────────
+  // Never the sources list: shows land on their details page with the
+  // playing season selected and the episode scrolled into view; movies
+  // return to the view the session started from — details when playback
+  // began there (or from its source list), home for Continue-watching
+  // resumes.
+  const closePlayer = useCallback(() => {
+    setSubmenuOpen(false);
+    const src = activeSourceRef.current;
+    setActiveSource(null);
+    resumeEntryRef.current = null;
+    // Trailer session → straight back to the details screen
+    if (src && src.trailer) {
+      setView('details');
+      return;
+    }
+    if (meta && meta.type === 'series') {
+      openDetailsFromPlayer();
+      return;
+    }
+    if (playOriginRef.current === 'home') {
+      goHome();
+      return;
+    }
+    if (meta && meta.type === 'movie') {
+      openDetailsFromPlayer();
+      return;
+    }
+    if (viewRef.current === 'details') return;   // details mounted behind
+    goHome();
+  }, [meta, openDetailsFromPlayer, goHome]);
 
   // ── global Esc chain ───────────────────────────────────────────────────
   useEffect(() => {
@@ -510,7 +539,10 @@ export default function App() {
               <HomeView
                 home={home}
                 onOpen={(item) => openDetails(item, 'home')}
-                onResume={resumeHistory}
+                onResume={(entry) => {
+                  playOriginRef.current = 'home';       // Return goes home
+                  resumeHistory(entry);
+                }}
               />
             )
           ) : null}
@@ -584,7 +616,10 @@ export default function App() {
                   onPlaySource={openPlayer}
                   onAutoScan={ensureMovieScan}
                   onPlayTrailer={openTrailer}
-                  onResumeEntry={resumeHistory}
+                  onResumeEntry={(entry) => {
+                    playOriginRef.current = 'details';  // Return goes to details
+                    resumeHistory(entry);
+                  }}
                 />
               ) : null}
 
@@ -607,6 +642,7 @@ export default function App() {
           subs={subs}
           resumeSec={resumeSec}
           onBack={closePlayer}
+          onChangeSource={changeSourceFromPlayer}
           onPickEpisode={pickEpisodeFromPlayer}
           onOpenDetails={openDetailsFromPlayer}
           submenuOpen={submenuOpen}

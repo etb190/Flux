@@ -131,7 +131,7 @@ function applyPlayerRules(src, sources) {
   api.setPlayerRules(rules);
 }
 
-export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
+export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, onChangeSource, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
   const containerRef = useRef(null);   // Artplayer mount point
   const stageRef = useRef(null);       // fullscreen target (art + overlays)
   const artRef = useRef(null);
@@ -284,8 +284,24 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         }
       : { name: source.title || '', imdbId: null, isEmbed: source.format === 'Embed' };
     subs.setContext(ctx);
+    // (Re)run the subtitle search whenever the context becomes usable or
+    // changes — resumed playback loads meta in the background, so the
+    // mount-time search no-ops; this re-fire is what makes subs appear
+    // with no manual Refresh. search(false) skips when results for this
+    // episode are already loaded. Embeds/trailers manage their own subs.
+    if (!source.trailer) subs.search(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, episode, source]);
+
+  // Opening the subtitle menu always has something to show: when no results
+  // are loaded and no search is in flight, start one now (covers failed or
+  // late searches) — no manual Refresh required.
+  useEffect(() => {
+    if (!submenuOpen || isTrailer) return;
+    if (subs.groups.length > 0 || subs.pending > 0) return;
+    subs.search(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submenuOpen, isTrailer, subs.groups.length, subs.pending]);
 
   // ── open one source (Artplayer + hls.js) ───────────────────────────────
   useEffect(() => {
@@ -529,9 +545,6 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       if (!v || !v.currentSrc) return;          // teardown clears src — ignore
       showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
     });
-
-    // Auto-fetch subtitles for this episode/movie (Helix _fetchInitialSubtitles)
-    if (!isTrailer) subs.search(false);
 
     return () => {
       clearTimeout(failTimerRef.current);
@@ -778,11 +791,9 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           </button>
         ) : null}
         {/* Episodes + Change source form one tight cluster (gap-2 inside vs
-            the top bar's uniform gap-4): related controls belong visually
-            together instead of floating 16px apart. Series only for Episodes —
-            seasons strip on top, episode list under it, opens on the episode
-            you are watching. */}
-        <div className="flex items-center gap-2 shrink-0">
+            the top bar's uniform gap-4), pulled 8px closer to the window
+            controls (-mr-2) so Change source sits right beside minimize. */}
+        <div className="flex items-center gap-2 shrink-0 -mr-2">
           {canBrowseEpisodes ? (
             <button
               data-testid="player-episodes"
@@ -804,7 +815,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           <button
             data-testid="player-switch"
             title="Pick a different source"
-            onClick={onBack}
+            onClick={onChangeSource}
             className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
           >
             <SwitchIcon />
