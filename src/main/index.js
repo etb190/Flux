@@ -330,6 +330,11 @@ ipcMain.handle('flux:discord:set', (_event, payload) => {
 
 ipcMain.handle('flux:discord:idle', () => discord.clearToIdle());
 
+// Manual reset from the sidebar Discord badge: full RPC teardown +
+// reconnect, ending idle (recovers a stuck presence that a plain
+// presence update would not fix).
+ipcMain.handle('flux:discord:reset', () => discord.reset());
+
 // ── IPC: home page (Cinemeta addon catalogs + TMDB trending) ─────────────
 ipcMain.handle('flux:home', async () => {
   const s = loadSettings(settingsFile());

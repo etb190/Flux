@@ -27,6 +27,15 @@ export function subMenuOrderIndex(label) {
   return i === -1 ? SUB_MENU_ORDER.length : i;
 }
 
+// Comparator for subtitle menu rows: whitelist order first (English, French,
+// Arabic, Italian, Spanish), anything unknown after, alphabetical inside a
+// bucket. The renderer's batch merge previously sorted groups with a plain
+// localeCompare, which is alphabetical — Arabic above English.
+export function subMenuCompare(a, b) {
+  return subMenuOrderIndex(a) - subMenuOrderIndex(b) ||
+         String(a).localeCompare(String(b));
+}
+
 // Match a language name or code ('en', 'eng', 'es-419', 'English') against
 // the whitelist; returns the canonical English name or null.
 export function subLangLabel(raw) {

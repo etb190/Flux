@@ -4,12 +4,29 @@
  * The FLUX brand lives in the custom title bar, so the rail is buttons only
  * (no "Menu" label — user request). The footer keeps the FLUX wordmark
  * (no version number — user request) with the black Discord mark across
- * from it, so the rail's bottom row reads as the app's brand strip.
+ * from it; clicking the mark resets the Rich Presence connection.
  */
 
+import { useCallback, useRef, useState } from 'react';
 import { HomeIcon, DiscoverIcon, SparkIcon, EyeIcon, BookmarkIcon, DiscordIcon } from './icons.jsx';
 
 export default function SideBar({ active, onTab }) {
+  // Clicking the Discord badge resets Rich Presence (full RPC teardown +
+  // reconnect, ending idle) — a manual fix for a stuck presence.
+  const [resetting, setResetting] = useState(false);
+  const resettingRef = useRef(false);
+  const resetPresence = useCallback(() => {
+    const api = typeof window !== 'undefined' ? window.fluxAPI : null;
+    if (!api || typeof api.discordReset !== 'function' || resettingRef.current) return;
+    resettingRef.current = true;             // double-click guard
+    setResetting(true);
+    Promise.resolve(api.discordReset())
+      .catch(() => {})
+      .finally(() => {
+        resettingRef.current = false;
+        setResetting(false);
+      });
+  }, []);
 
   const item = (id, label, icon) => (
     <button
@@ -46,15 +63,21 @@ export default function SideBar({ active, onTab }) {
         <p className="px-2 text-[10.5px] font-semibold tracking-[0.1em] text-muted/70 select-none">
           FLUX
         </p>
-        {/* Black Discord mark on a light chip — visible on the dark rail,
-            decorative brand badge (no invite URL to open). */}
-        <span
+        {/* Black Discord mark on a light chip — visible on the dark rail.
+            Clicking it resets the Rich Presence connection. */}
+        <button
+          type="button"
           data-testid="sidebar-discord"
-          title="Discord"
-          className="w-7 h-7 rounded-full bg-[#f5f5f5] text-black flex items-center justify-center select-none"
+          title="Discord — click to reset Rich Presence"
+          aria-label="Reset Discord Rich Presence"
+          onClick={resetPresence}
+          className={
+            'w-7 h-7 rounded-full bg-[#f5f5f5] text-black flex items-center justify-center select-none transition-opacity ' +
+            (resetting ? 'opacity-50' : 'hover:opacity-80 active:opacity-60')
+          }
         >
           <DiscordIcon size={16} />
-        </span>
+        </button>
       </div>
     </aside>
   );

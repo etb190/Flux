@@ -366,6 +366,27 @@ function createDiscordService(options) {
       } catch (_) { /* ignore */ }
     },
 
+    // Manual reset (the sidebar Discord badge): full RPC teardown — clear
+    // the presence, destroy the pipe client — then reconnect from scratch
+    // and end on the idle presence. Recovers stuck Discord client states
+    // that a plain SET_ACTIVITY update would not fix. Keeps the enabled
+    // preference; no-op connect-wise when the service is disabled.
+    async reset() {
+      const wasEnabled = enabled;
+      stopPausedRefresh();
+      try {
+        if (client && initialized) await clearActivityRaw();
+      } catch (_) { /* gone already */ }
+      await disposeClient();
+      initialized = false;
+      currentKind = 'idle';
+      lastArgs = null;
+      if (!wasEnabled) return false;
+      const ok = await connect();
+      if (ok) await this.setIdle();
+      return ok;
+    },
+
     // App quit: wipe the presence, then close the pipe cleanly.
     async shutdown() {
       stopPausedRefresh();

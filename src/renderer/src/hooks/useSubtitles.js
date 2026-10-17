@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { subParse, findActiveCueIndex, subLangLabel, subMenuOrderIndex } from '../lib/subsParser.js';
+import { subParse, findActiveCueIndex, subLangLabel, subMenuOrderIndex, subMenuCompare } from '../lib/subsParser.js';
 
 function fluxApi() {
   return typeof window !== 'undefined' ? window.fluxAPI : null;
@@ -112,7 +112,10 @@ export function useSubtitles() {
           group.variants.push(v);
         }
         if (changed) {
-          next.sort((a, b) => a.language.localeCompare(b.language));
+          // Menu order (English, French, Arabic, Italian, Spanish; unknown
+          // last) — a plain localeCompare here is ALPHABETICAL, which is
+          // exactly what put Arabic above English in the player's menu.
+          next.sort((a, b) => subMenuCompare(a.language, b.language));
           groupsRef.current = next;
           setGroups(next);
         }

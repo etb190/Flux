@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   // reports what is playing / that the player closed; main owns the pipe.
   discordSet: (payload) => ipcRenderer.invoke('flux:discord:set', payload),
   discordIdle: () => ipcRenderer.invoke('flux:discord:idle'),
+  // Sidebar Discord badge → full Rich Presence reset (teardown + reconnect)
+  discordReset: () => ipcRenderer.invoke('flux:discord:reset'),
   relaunchApp: () => ipcRenderer.invoke('flux:app:relaunch'),
   getGpuInfo: () => ipcRenderer.invoke('flux:gpu:info'),
   // Home page (Cinemeta addon catalogs + TMDB trending)
