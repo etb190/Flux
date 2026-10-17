@@ -61,6 +61,17 @@ function langName(raw) {
 // before results reach the player menu.
 const SUB_ALLOWED_CODES = new Set(['en', 'fr', 'it', 'es', 'ar']);
 
+// Menu DISPLAY order for the whitelisted languages (user request):
+// English, French, Arabic, Italian, Spanish. Anything outside the whitelist
+// (e.g. an 'Unknown' bucket) sorts alphabetically after them.
+const SUB_LANG_ORDER = ['en', 'fr', 'ar', 'it', 'es'];
+
+function subLangOrderIndex(raw) {
+  const code = subLangCode(raw);
+  const i = code ? SUB_LANG_ORDER.indexOf(code) : -1;
+  return i === -1 ? SUB_LANG_ORDER.length : i;
+}
+
 // language display name (lowercased) → shortest (iso2) code, e.g. 'english' → 'en'
 const NAME_TO_CODE = {};
 for (const [code, name] of Object.entries(LANG_NAMES)) {
@@ -539,6 +550,7 @@ async function searchSubtitles(params, { onBatch, onDone } = {}) {
 }
 
 // Helix SubtitleService.groupVariantsByLanguage: dedupe URLs, group + sort
+// (menu order: English, French, Arabic, Italian, Spanish — see SUB_LANG_ORDER)
 function groupVariantsByLanguage(variants) {
   const grouped = new Map();
   const seen = new Set();
@@ -550,7 +562,9 @@ function groupVariantsByLanguage(variants) {
     if (!grouped.has(lang)) grouped.set(lang, []);
     grouped.get(lang).push(v);
   }
-  return [...grouped.keys()].sort().map((lang) => ({ language: lang, variants: grouped.get(lang) }));
+  return [...grouped.keys()]
+    .sort((a, b) => subLangOrderIndex(a) - subLangOrderIndex(b) || a.localeCompare(b))
+    .map((lang) => ({ language: lang, variants: grouped.get(lang) }));
 }
 
 // ── Extraction (Helix SubtitleExtractor) ──────────────────────────────────
@@ -710,5 +724,7 @@ module.exports = {
   langName,
   subLangCode,
   filterLangVariants,
-  SUB_ALLOWED_CODES
+  SUB_ALLOWED_CODES,
+  SUB_LANG_ORDER,
+  subLangOrderIndex
 };

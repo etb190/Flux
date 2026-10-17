@@ -17,6 +17,16 @@ const SUB_LANG_NAMES = {
   italian: 'Italian', spanish: 'Spanish', arabic: 'Arabic'
 };
 
+// Menu DISPLAY order for the whitelist (must mirror main/subtitles.js):
+// English, French, Arabic, Italian, Spanish — the order the user asked for,
+// not alphabetical.
+export const SUB_MENU_ORDER = ['English', 'French', 'Arabic', 'Italian', 'Spanish'];
+
+export function subMenuOrderIndex(label) {
+  const i = SUB_MENU_ORDER.indexOf(label);
+  return i === -1 ? SUB_MENU_ORDER.length : i;
+}
+
 // Match a language name or code ('en', 'eng', 'es-419', 'English') against
 // the whitelist; returns the canonical English name or null.
 export function subLangLabel(raw) {

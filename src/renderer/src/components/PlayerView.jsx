@@ -359,6 +359,12 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     const style = subs.subsStyle || { scale: 1, bg: 0 };
     const delayNow = subs.delay || 0;
 
+    // hls.js fatal-error retry budgets (per source instance): consecutive
+    // fatal MEDIA errors are usually recovery churn (buffer/codec swaps),
+    // NETWORK errors get one manual load restart before we give up. Both
+    // reset whenever playback is demonstrably alive again (video:playing).
+    let hlsMediaRetries = 0;
+    let hlsNetRetries = 0;
     let art;
     try {
       art = new Artplayer({
@@ -391,7 +397,18 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
               hls.on(Hls.Events.ERROR, (_e, data) => {
                 if (!data || !data.fatal) return;
                 if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                  try { hls.recoverMediaError(); return; } catch (_err) {}
+                  // Consecutive fatal media errors are recovery churn —
+                  // hls.js recovers and playback continues; fail-carding
+                  // here covered streams that were working just fine.
+                  if (hlsMediaRetries++ < 3) {
+                    try { hls.recoverMediaError(); return; } catch (_err) {}
+                  }
+                } else if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                  // hls.js already exhausted its own load retries; one
+                  // manual restart rescues flaky hosts before we give up.
+                  if (hlsNetRetries++ < 2) {
+                    try { hls.startLoad(); return; } catch (_err) {}
+                  }
                 }
                 showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
               });
@@ -544,6 +561,8 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       failTimerRef.current = null;
       setBuffering(false);
       setFailMsg(null);
+      hlsMediaRetries = 0;                    // playback alive again — re-arm
+      hlsNetRetries = 0;                      // the recovery budgets
       updatePresenceRef.current(false);       // playing → presence w/ timestamps
     });
     art.on('video:waiting', () => {
@@ -556,6 +575,12 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     art.on('video:error', () => {
       const v = art.video;
       if (!v || !v.currentSrc) return;          // teardown clears src — ignore
+      const code = v.error && v.error.code;
+      if (code === 1) return;                   // MEDIA_ERR_ABORTED — benign load switch
+      // The fail card must never cover a stream that is demonstrably still
+      // running: transient hiccups emit error events while playback keeps
+      // going (if it truly died, nothing would clear the card below).
+      if (!v.paused && !v.ended && v.readyState >= 2) return;
       showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
     });
 
@@ -943,13 +968,26 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
           >
             <h3 className="text-xl font-semibold">This source couldn&rsquo;t be played</h3>
             <p data-testid="player-fail-msg" className="text-dim max-w-md">{failMsg}</p>
-            <button
-              data-testid="player-fail-back"
-              onClick={onBack}
-              className="mt-2 bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
-            >
-              Pick another source
-            </button>
+            <div className="mt-2 flex items-center gap-3">
+              {/* "Pick another source" MUST open the sources screen (a fresh
+                  scan for this title/episode) — it used to share onBack with
+                  Return, which dumped resume failures back on the home
+                  screen instead of letting the user re-pick. */}
+              <button
+                data-testid="player-fail-sources"
+                onClick={onChangeSource || onBack}
+                className="bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
+              >
+                Pick another source
+              </button>
+              <button
+                data-testid="player-fail-back"
+                onClick={onBack}
+                className="bg-white/10 px-5 py-2.5 font-medium text-white hover:bg-white/20"
+              >
+                Go back
+              </button>
+            </div>
           </div>
         ) : null}
       </div>

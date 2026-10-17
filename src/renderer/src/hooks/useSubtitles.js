@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { subParse, findActiveCueIndex, subLangLabel } from '../lib/subsParser.js';
+import { subParse, findActiveCueIndex, subLangLabel, subMenuOrderIndex } from '../lib/subsParser.js';
 
 function fluxApi() {
   return typeof window !== 'undefined' ? window.fluxAPI : null;
@@ -207,7 +207,11 @@ export function useSubtitles() {
           lang: t.lang
         }))
         .filter((t) => t.name)
-        .map((t) => ({ id: t.id, name: t.name, lang: t.lang }));
+        .map((t) => ({ id: t.id, name: t.name, lang: t.lang }))
+        // Same menu order as the external-provider groups (English, French,
+        // Arabic, Italian, Spanish) instead of manifest order.
+        .sort((a, b) => subMenuOrderIndex(a.name) - subMenuOrderIndex(b.name) ||
+                        a.name.localeCompare(b.name));
       setEmbedded(tracks);
     } catch (_err) {
       setEmbedded([]);

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, session, shell, screen } = require('electron');
 const path = require('path');
 const { searchAll, fetchMeta } = require('./search.js');
 const { fetchStreams, cancelStreams } = require('./streams.js');
@@ -8,6 +8,7 @@ const discover = require('./discover.js');
 const library = require('./library.js');
 const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
+const { loadWindowState, sanitizeWindowState, saveWindowState } = require('./windowState.js');
 const { createDiscordService, DISCORD_APP_ID } = require('./discord.js');
 const trailers = require('./trailerserver.js');
 
@@ -40,10 +41,23 @@ const libraryFile = () => path.join(app.getPath('userData'), 'flux-library.json'
 
 let mainWin = null;
 
+// ── window bounds persistence ────────────────────────────────────────────
+// The window remembers its last size + position (+ maximized) across
+// launches: saved to userData/window-state.json on resize/move (debounced)
+// and on close, restored in createWindow. Garbage/off-screen bounds fall
+// back to the 1280x820 default, centered by the OS.
+const WIN_STATE_FILE = () => path.join(app.getPath('userData'), 'window-state.json');
+let winStateTimer = null;
+
 function createWindow() {
+  const ws = sanitizeWindowState(
+    loadWindowState(WIN_STATE_FILE()),
+    (b) => screen.getDisplayMatching(b).workArea
+  );
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    width: ws.width,
+    height: ws.height,
+    ...(ws.x != null ? { x: ws.x, y: ws.y } : {}),
     minWidth: 940,
     minHeight: 600,
     backgroundColor: '#0d0d0d',
@@ -65,6 +79,23 @@ function createWindow() {
   mainWin = win;
 
   win.once('ready-to-show', () => win.show());
+  if (ws.maximized) win.maximize();
+
+  // Save the bounds (debounced — resize/move fire in bursts while dragging)
+  const saveWinStateNow = () => {
+    if (win.isDestroyed() || win.isMinimized()) return;
+    saveWindowState(WIN_STATE_FILE(), win);
+  };
+  const queueSaveWinState = () => {
+    if (winStateTimer) clearTimeout(winStateTimer);
+    winStateTimer = setTimeout(() => { winStateTimer = null; saveWinStateNow(); }, 400);
+  };
+  win.on('resize', queueSaveWinState);
+  win.on('move', queueSaveWinState);
+  win.on('close', () => {
+    if (winStateTimer) { clearTimeout(winStateTimer); winStateTimer = null; }
+    saveWinStateNow();
+  });
 
   // Push window state to the custom title bar (maximize/restore glyph)
   const sendWinState = () => {
