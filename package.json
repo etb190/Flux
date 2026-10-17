@@ -1,7 +1,7 @@
 {
   "name": "flux",
   "productName": "Flux",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "description": "Flux - streaming app (Electron + React + Vite)",
   "repository": {
     "type": "git",

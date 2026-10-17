@@ -4,11 +4,14 @@
 //   • One connection to the local Discord IPC pipe (Windows named pipe
 //     \\?\pipe\discord-ipc-N) owned by the main process.
 //   • Idle presence "Browsing Netflix" with the session start time.
-//   • Watching a movie  → details "Watching {title}", state "(year)",
-//     large image = poster URL, timestamps = elapsed position (Discord
-//     counts UP the hours/minutes/seconds you are into the video).
+//   • Watching a movie  → details "Watching {title}", state "(year)"
+//     (or "In {app}" without one) + " (Paused)" while paused, large image =
+//     poster URL, timestamps = elapsed position (Discord counts UP the
+//     hours/minutes/seconds you are into the video).
 //   • Watching a series → details "Watching {title}", state
-//     "S{x}E{y}: {episode}" (+ " (Paused)"), same image/timestamp rules.
+//     "S{x}E{y}: {episode}" (+ " (Paused)" while paused — BOTH kinds say
+//     so; v0.35: movies previously never indicated the pause), same
+//     image/timestamp rules.
 //   • Paused → the timer FREEZES at the paused position. Discord renders
 //     elapsed as (now - start) and RETAINS omitted timestamps between
 //     updates, so freezing needs re-sends: while paused the service
@@ -110,8 +113,11 @@ function buildMoviePresence({ title, year, posterUrl, positionSec, durationSec, 
   return {
     activityType: TYPE_WATCHING,
     details: 'Watching ' + cleanTitle,
-    // Helix: "(2021)" while watching, "In Netflix" without a year
-    state: cleanYear ? '(' + cleanYear + ')' : 'In ' + APP_NAME,
+    // Helix: "(2021)" while watching, "In Netflix" without a year.
+    // Paused says so in the same state line, like series ("(2010) (Paused)").
+    state:
+      (cleanYear ? '(' + cleanYear + ')' : 'In ' + APP_NAME) +
+      (paused ? ' (Paused)' : ''),
     largeImage: buildLargeImage(posterUrl, cleanTitle),
     // Watching badge: the app logo, bottom-right of the media art. Must be
     // an http(s) URL — portal asset keys only render if uploaded by hand.
