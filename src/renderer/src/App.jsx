@@ -24,6 +24,7 @@ import { useSearch } from './hooks/useSearch.js';
 import { useStreams } from './hooks/useStreams.js';
 import { useSubtitles } from './hooks/useSubtitles.js';
 import { getMeta } from './lib/cinemeta.js';
+import { resolveCarrySec } from './lib/progress.js';
 
 export default function App() {
   const [view, setView] = useState('home');
@@ -47,6 +48,10 @@ export default function App() {
   const scanTargetRef = useRef(null);        // params behind the running/last scan
   const resumeEntryRef = useRef(null);       // history entry behind a resumed player
   const [resumeSec, setResumeSec] = useState(0);   // seek target for the player
+  // Last position snapshot reported by the player (onProgress). Kept so a
+  // source re-pick for the SAME title/episode can resume where the old
+  // source left off (stream hosts expire while playback sits paused).
+  const playerProgressRef = useRef(null);
   const [detailsHighlight, setDetailsHighlight] = useState(null); // S/E to land on in details
 
   // mirrors for the stable Esc handler
@@ -190,6 +195,7 @@ export default function App() {
 
   const openDetails = useCallback(async (item, from) => {
     const seq = ++detailsSeqRef.current;
+    playerProgressRef.current = null;          // progress belongs to the old title
     setMeta(null);
     setDetailsHighlight(null);
     streams.stopScan();
@@ -243,11 +249,22 @@ export default function App() {
     setView('details');
   }, [streams]);
 
+  // Player progress snapshot → ref (read by openPlayer when the user
+  // re-picks a source for what's playing).
+  const handlePlayerProgress = useCallback((p) => {
+    playerProgressRef.current = p;
+  }, []);
+
   const openPlayer = useCallback((src) => {
     setActiveSource(src);
     resumeEntryRef.current = null;           // fresh playback, not a resume
-    setResumeSec(0);
     playOriginRef.current = 'details';       // sources/details play origin
+
+    // Source re-pick for the same title/episode (the stream died while the
+    // video sat paused, or the user wants a different host): resume from
+    // the position the old source reached instead of restarting at 0:00.
+    const carrySec = resolveCarrySec(playerProgressRef.current, meta, episode);
+    setResumeSec(carrySec);
 
     // Continue watching: record this playback in the history (one entry per
     // title; series entries carry the season/episode, the episode still,
@@ -272,8 +289,9 @@ export default function App() {
         // card art: the episode's own still for series, backdrop for movies
         still: isSeries ? (epMeta ? epMeta.thumbnail : null) : (meta.background || null),
         backdrop: meta.background || null,
-        // fresh playback: reset the resume point + record the source
-        positionSec: 0,
+        // fresh playback resets the resume point — unless this pick is a
+        // source switch, which keeps the position we carried over
+        positionSec: carrySec,
         sourceUrl: src && src.url ? String(src.url) : null,
         sourceProvider: src && src.provider ? String(src.provider) : null,
         sourceTitle: src && src.title ? String(src.title) : null,
@@ -294,6 +312,7 @@ export default function App() {
     streams.stopScan();
     scanTargetRef.current = null;            // returning restarts the movie scan
     resumeEntryRef.current = null;
+    playerProgressRef.current = null;
     playOriginRef.current = 'details';
     setResumeSec(0);
     let url = null;
@@ -374,6 +393,7 @@ export default function App() {
     setSubmenuOpen(false);
     setActiveSource(null);
     resumeEntryRef.current = null;             // the resume entry is stale now
+    playerProgressRef.current = null;          // a different episode never carries
     openSources(ep);
   }, [openSources]);
 
@@ -384,6 +404,9 @@ export default function App() {
     setSubmenuOpen(false);
     setActiveSource(null);
     resumeEntryRef.current = null;
+    // playerProgressRef deliberately KEPT: the player's unmount tick saves
+    // the final position, and openPlayer carries it into whichever source
+    // the user picks next for this same title/episode.
     if (!meta) return;
     openSources(meta.type === 'series' && episode
       ? episode
@@ -422,6 +445,7 @@ export default function App() {
     const src = activeSourceRef.current;
     setActiveSource(null);
     resumeEntryRef.current = null;
+    playerProgressRef.current = null;        // leaving playback — nothing to carry
     // Trailer session → straight back to the details screen
     if (src && src.trailer) {
       setView('details');
@@ -641,6 +665,7 @@ export default function App() {
           episode={episode}
           subs={subs}
           resumeSec={resumeSec}
+          onProgress={handlePlayerProgress}
           onBack={closePlayer}
           onChangeSource={changeSourceFromPlayer}
           onPickEpisode={pickEpisodeFromPlayer}

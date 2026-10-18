@@ -131,7 +131,7 @@ function applyPlayerRules(src, sources) {
   api.setPlayerRules(rules);
 }
 
-export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onBack, onChangeSource, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
+export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onProgress, onBack, onChangeSource, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
   const containerRef = useRef(null);   // Artplayer mount point
   const stageRef = useRef(null);       // fullscreen target (art + overlays)
   const artRef = useRef(null);
@@ -145,6 +145,19 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   const resumeAppliedRef = useRef(false);
   const resumeSecRef = useRef(resumeSec || 0);
   useEffect(() => { resumeSecRef.current = resumeSec || 0; }, [resumeSec]);
+
+  // ── stale-source recovery (one silent reload per source) ─────────────
+  // Stream hosts expire sessions: leave a video paused for a while and the
+  // next request fails fatally. Before fail-carding, the open effect is
+  // re-run once (reloadNonce) to rebuild the player from scratch at the
+  // last good position — a fresh connection usually rides through the
+  // expiry with no prompt at all.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const staleReloadUsedRef = useRef(false);   // one attempt per source instance
+  const wasPausedOnReloadRef = useRef(false); // restore the paused state after
+  const prevSourceRef = useRef(null);         // detects genuinely-new sources
+  const onProgressRef = useRef(onProgress);
+  useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
 
   const [buffering, setBuffering] = useState(true);
   const [failMsg, setFailMsg] = useState(null);
@@ -168,6 +181,26 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   const toggleSubmenuRef = useRef(() => {});
   const saveProgressRef = useRef(() => {});
   const updatePresenceRef = useRef(() => {});
+
+  // One-shot silent reload of the SAME source at the current position (see
+  // the stale-source recovery note above the state). Returns true when the
+  // reload was scheduled — the caller must NOT fail-card this error.
+  const tryStaleReload = useCallback(() => {
+    if (isEmbed || isTrailer) return false;
+    if (staleReloadUsedRef.current) return false;
+    if (!playedOnceRef.current) return false;      // never worked → reload won't help
+    const art = artRef.current;
+    const v = art && art.video;
+    if (!v) return false;
+    if (!Number.isFinite(v.currentTime) || v.currentTime < 1) return false;
+    if (!Number.isFinite(v.duration) || v.duration <= 0) return false;
+    staleReloadUsedRef.current = true;
+    wasPausedOnReloadRef.current = Boolean(v.paused);
+    resumeSecRef.current = Math.floor(v.currentTime);  // tryResumeSeek reapplies it
+    setBuffering(true);
+    setReloadNonce((n) => n + 1);                  // re-runs the open effect
+    return true;
+  }, [isEmbed, isTrailer]);
 
   // ── Discord Rich Presence (Helix _updateDiscordRpc port) ───────────────
   // Reports what is playing to the main process, which owns the single
@@ -259,19 +292,32 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   // ── continue-watching progress (same-source resume) ────────────────────
   const saveProgress = useCallback(() => {
     const video = videoRef.current;
-    const api = window.fluxAPI;
-    if (!video || !api || typeof api.historyProgress !== 'function') return;
-    if (!meta || !meta.id || !/^tt\d+$/.test(meta.id)) return;
+    if (!video) return;
     if (!Number.isFinite(video.duration) || video.duration <= 0) return;
     if (!Number.isFinite(video.currentTime) || video.currentTime < 3) return;
     // watched to the end → the next resume restarts from the top
     const pos = video.currentTime > video.duration * 0.95
       ? 0 : video.currentTime;
+    // snapshot up to App — a source re-pick for the same title/episode
+    // resumes from here instead of restarting at 0:00
+    if (onProgressRef.current) {
+      onProgressRef.current({
+        imdbId: (meta && meta.id) || null,
+        season: episode ? (episode.season ?? 1) : null,
+        episode: episode ? (episode.episode ?? 1) : null,
+        positionSec: Math.round(pos),
+        durationSec: Math.round(video.duration),
+        at: Date.now()
+      });
+    }
+    const api = window.fluxAPI;
+    if (!api || typeof api.historyProgress !== 'function') return;
+    if (!meta || !meta.id || !/^tt\d+$/.test(meta.id)) return;
     api.historyProgress(meta.id, {
       positionSec: Math.round(pos),
       durationSec: Math.round(video.duration)
     }).catch(() => {});
-  }, [meta]);
+  }, [meta, episode]);
   useEffect(() => { saveProgressRef.current = saveProgress; }, [saveProgress]);
 
   useEffect(() => {
@@ -318,6 +364,13 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
 
   // ── open one source (Artplayer + hls.js) ───────────────────────────────
   useEffect(() => {
+    // A genuinely NEW source gets a fresh reload budget; the reload's own
+    // re-run (same source object, bumped nonce) must NOT re-arm it — that
+    // would turn one rescue into an infinite reload loop.
+    if (prevSourceRef.current !== source) {
+      prevSourceRef.current = source;
+      staleReloadUsedRef.current = false;
+    }
     setBuffering(true);
     setFailMsg(null);
     setOverlayText('');
@@ -391,7 +444,9 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
               hls.on(Hls.Events.MANIFEST_PARSED, () => {
                 // Embedded WebVTT subtitle tracks → menu
                 subs.setEmbeddedTracks(hls);
-                video.play().catch(() => {});
+                // A paused-idle recovery reload must stay paused — no
+                // autoplay out of the user's intent.
+                if (!wasPausedOnReloadRef.current) video.play().catch(() => {});
               });
               hls.on(Hls.Events.CUES_PARSED, (_e, data) => subs.pushEmbeddedCues(data));
               hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -410,6 +465,10 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
                     try { hls.startLoad(); return; } catch (_err) {}
                   }
                 }
+                // Expired host session (the paused-for-a-while signature):
+                // one silent rebuild at the current position before we
+                // bother the user with the fail card.
+                if (tryStaleReload()) return;
                 showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
               });
               hls.loadSource(url);
@@ -534,6 +593,12 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
         try {
           v.currentTime = Math.min(resumeSecRef.current, Math.max(0, v.duration - 5));
         } catch (_err) {}
+        // Recovery reload of a stream that was paused: stay paused at the
+        // restored position (autoplay was skipped in MANIFEST_PARSED).
+        if (wasPausedOnReloadRef.current) {
+          wasPausedOnReloadRef.current = false;
+          try { v.pause(); } catch (_err) {}
+        }
       }
     };
 
@@ -554,7 +619,16 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       tryResumeSeek();
     });
     art.on('video:loadedmetadata', tryResumeSeek);
-    art.on('video:seeked', () => { updatePresenceRef.current(); });
+    art.on('video:seeked', () => {
+      // A completed seek is proof the host answered (the data at the target
+      // position arrived) — a paused recovery reload never emits
+      // video:playing, so without this the 25s dead-host timer would
+      // fail-card a healthy paused stream. Also drops the buffering veil.
+      clearTimeout(failTimerRef.current);
+      failTimerRef.current = null;
+      setBuffering(false);
+      updatePresenceRef.current();
+    });
     art.on('video:playing', () => {
       playedOnceRef.current = true;
       clearTimeout(failTimerRef.current);
@@ -581,6 +655,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       // running: transient hiccups emit error events while playback keeps
       // going (if it truly died, nothing would clear the card below).
       if (!v.paused && !v.ended && v.readyState >= 2) return;
+      if (tryStaleReload()) return;             // one silent rebuild first
       showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
     });
 
@@ -596,7 +671,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       setVideoReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [source, reloadNonce, tryStaleReload]);
 
   // ── webview listeners (embed sources — trailers use a plain iframe and
   //    need none of these) ───────────────────────────────────────────────
