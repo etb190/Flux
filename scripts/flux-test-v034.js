@@ -49,7 +49,7 @@ ok(/subMenuOrderIndex\(a\.name\) - subMenuOrderIndex\(b\.name\)/.test(us), 'embe
 console.log('C. spurious fail card while playback is fine');
 const pv = read('../src/renderer/src/components/PlayerView.jsx');
 ok(/const code = v\.error && v\.error\.code;\s*\n\s*if \(code === 1\) return;/.test(pv), 'video:error ignores MEDIA_ERR_ABORTED (benign load switch)');
-ok(/if \(!v\.paused && !v\.ended && v\.readyState >= 2\) return;/.test(pv), 'video:error never fails a stream that is still playing');
+ok(/if \(!v\.paused && !v\.ended && v\.readyState >= 3\) return;/.test(pv), 'video:error never fails a stream with data still flowing ahead (HAVE_FUTURE_DATA+; v0.38 raised the bar from the buffering-starved 2)');
 ok(/if \(hlsMediaRetries\+\+ < 3\)/.test(pv), 'fatal MEDIA errors get up to 3 recoverMediaError retries');
 ok(/if \(hlsNetRetries\+\+ < 2\)/.test(pv), 'fatal NETWORK errors get up to 2 startLoad retries');
 ok(/hlsMediaRetries = 0;[\s\S]*?hlsNetRetries = 0;/.test(pv), 'retry budgets reset when playback resumes (video:playing)');

@@ -19,6 +19,12 @@ import { BackIcon, SwitchIcon, ListIcon, WinMinimizeIcon, WinMaximizeIcon, WinRe
 
 const CHROME_IDLE_MS = 2600;
 
+// Mid-play stall watchdog: "playing" but the position hasn't advanced for
+// this long = the host stopped sending data (hung connection / range cap).
+// See the watchdog block inside the open effect.
+const STALL_WATCHDOG_MS = 15000;
+const STALL_SWEEP_MS = 4000;
+
 // Artplayer statics: no double-click fullscreen (it would hide our overlay
 // layer), no default context menu.
 Artplayer.DBCLICK_FULLSCREEN = false;
@@ -140,6 +146,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   const webviewRef = useRef(null);
   const failTimerRef = useRef(null);
   const idleTimerRef = useRef(null);
+  const stallTimerRef = useRef(null);
   const playedOnceRef = useRef(false);
   const progressTimerRef = useRef(null);
   const resumeAppliedRef = useRef(false);
@@ -419,6 +426,20 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     let hlsMediaRetries = 0;
     let hlsNetRetries = 0;
     let art;
+
+    // ── mid-play stall watchdog ─────────────────────────────────────────
+    // Stream hosts sometimes stop sending data mid-playback WITHOUT
+    // failing: the connection hangs (no response, no close) or a byte-range
+    // cap is hit, the <video> spins "waiting" forever and NEITHER the
+    // element nor hls.js fires a fatal error — no amount of waiting
+    // recovers. Watchdogs the last observed playback position: while the
+    // video is (supposed to be) playing and the position hasn't advanced
+    // for STALL_WATCHDOG_MS, treat the stream as dead — one silent rebuild
+    // at the current position (tryStaleReload), then the fail card. The
+    // anchor resets on every advancing timeupdate and on video:playing;
+    // pauses keep it fresh so resuming never looks like an instant stall.
+    let stallPos = -1;
+    let stallPosAt = Date.now();
     try {
       art = new Artplayer({
         container: containerRef.current,
@@ -635,6 +656,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       failTimerRef.current = null;
       setBuffering(false);
       setFailMsg(null);
+      stallPosAt = Date.now();                // fresh watchdog anchor on resume
       hlsMediaRetries = 0;                    // playback alive again — re-arm
       hlsNetRetries = 0;                      // the recovery budgets
       updatePresenceRef.current(false);       // playing → presence w/ timestamps
@@ -654,14 +676,45 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       // The fail card must never cover a stream that is demonstrably still
       // running: transient hiccups emit error events while playback keeps
       // going (if it truly died, nothing would clear the card below).
-      if (!v.paused && !v.ended && v.readyState >= 2) return;
+      // HAVE_FUTURE_DATA (3) is the honest "data still flowing ahead" bar —
+      // HAVE_CURRENT_DATA (2) is the buffering-starved state, and the
+      // connection-death error fires exactly there; swallowing it left the
+      // video frozen forever with no fail card and no recovery.
+      if (!v.paused && !v.ended && v.readyState >= 3) return;
       if (tryStaleReload()) return;             // one silent rebuild first
       showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
     });
 
+    art.on('video:timeupdate', () => {
+      const v = art.video;
+      if (!v) return;
+      const t = v.currentTime;
+      if (Number.isFinite(t) && Math.abs(t - stallPos) > 0.4) {
+        stallPos = t;
+        stallPosAt = Date.now();
+      }
+    });
+
+    // Stall sweep — see the watchdog note near the top of this effect.
+    // Only a stream that has PROVEN alive (playedOnce) is supervised;
+    // pauses/ends keep the anchor fresh, and a confirmed stall gets the
+    // same one-shot silent rebuild as every other dead-stream path.
+    stallTimerRef.current = setInterval(() => {
+      const v = artRef.current && artRef.current.video;
+      if (!v) return;
+      if (isEmbed || isTrailer) return;         // webview playback is opaque
+      if (!playedOnceRef.current || failMsgRef.current) return;
+      if (v.paused || v.ended) { stallPosAt = Date.now(); return; }
+      if (Date.now() - stallPosAt < STALL_WATCHDOG_MS) return;
+      if (tryStaleReload()) return;
+      showPlayerFail('The stream stopped responding mid-playback \u2014 try another source below.');
+    }, STALL_SWEEP_MS);
+
     return () => {
       clearTimeout(failTimerRef.current);
       failTimerRef.current = null;
+      clearInterval(stallTimerRef.current);
+      stallTimerRef.current = null;
       const hls = hlsRef.current;
       if (hls) { try { hls.destroy(); } catch (_err) {} hlsRef.current = null; }
       subs.detachHls();
