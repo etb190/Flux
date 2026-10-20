@@ -137,7 +137,7 @@ function applyPlayerRules(src, sources) {
   api.setPlayerRules(rules);
 }
 
-export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onProgress, onBack, onChangeSource, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
+export default function PlayerView({ source, sources, meta, episode, subs, resumeSec, onProgress, onBack, onChangeSource, onSourceDead, staleTimeoutMs, onPickEpisode, onOpenDetails, submenuOpen, onToggleSubmenu, onCloseSubmenu }) {
   const containerRef = useRef(null);   // Artplayer mount point
   const stageRef = useRef(null);       // fullscreen target (art + overlays)
   const artRef = useRef(null);
@@ -409,12 +409,20 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       return undefined;
     }
 
-    // If nothing plays within 25s, treat the host as dead
-    failTimerRef.current = setTimeout(() => {
-      if (!playedOnceRef.current) {
+    // A connecting stream is NEVER failed on a timer — hosts can take a
+    // long time and waiting is harmless (the user can always Return or
+    // Change source from the top bar). The one exception: a RESUMED saved
+    // source (staleTimeoutMs set by App) — its URL is usually host-expired,
+    // so after a generous deadline we fall back AUTOMATICALLY to a fresh
+    // sources scan (onSourceDead, position carried) instead of showing a
+    // fail card. video:playing / video:seeked disarm it as usual.
+    if (staleTimeoutMs > 0) {
+      failTimerRef.current = setTimeout(() => {
+        if (playedOnceRef.current) return;      // it came alive — never mind
+        if (onSourceDead && onSourceDead()) return;  // resume → fresh scan
         showPlayerFail('Timed out while contacting the stream host.');
-      }
-    }, 25000);
+      }, staleTimeoutMs);
+    }
 
     const style = subs.subsStyle || { scale: 1, bg: 0 };
     const delayNow = subs.delay || 0;
@@ -487,9 +495,12 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
                   }
                 }
                 // Expired host session (the paused-for-a-while signature):
-                // one silent rebuild at the current position before we
+                // one silent rebuild at the current position, then — for a
+                // Continue-watching resume — an automatic fallback to a
+                // fresh sources scan (the position is carried), before we
                 // bother the user with the fail card.
                 if (tryStaleReload()) return;
+                if (onSourceDead && onSourceDead()) return;
                 showPlayerFail('The stream host refused the request \u2014 it may be offline, geo-blocked, or require special headers.');
               });
               hls.loadSource(url);
@@ -643,7 +654,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     art.on('video:seeked', () => {
       // A completed seek is proof the host answered (the data at the target
       // position arrived) — a paused recovery reload never emits
-      // video:playing, so without this the 25s dead-host timer would
+      // video:playing, so without this the resume fallback timer would
       // fail-card a healthy paused stream. Also drops the buffering veil.
       clearTimeout(failTimerRef.current);
       failTimerRef.current = null;
@@ -682,6 +693,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       // video frozen forever with no fail card and no recovery.
       if (!v.paused && !v.ended && v.readyState >= 3) return;
       if (tryStaleReload()) return;             // one silent rebuild first
+      if (onSourceDead && onSourceDead()) return;  // resume → fresh sources scan
       showPlayerFail('Playback failed \u2014 the file could not be decoded or reached. Try another source.');
     });
 
@@ -707,6 +719,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
       if (v.paused || v.ended) { stallPosAt = Date.now(); return; }
       if (Date.now() - stallPosAt < STALL_WATCHDOG_MS) return;
       if (tryStaleReload()) return;
+      if (onSourceDead && onSourceDead()) return;  // resume → fresh sources scan
       showPlayerFail('The stream stopped responding mid-playback \u2014 try another source below.');
     }, STALL_SWEEP_MS);
 

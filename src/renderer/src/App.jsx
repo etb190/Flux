@@ -26,6 +26,13 @@ import { useSubtitles } from './hooks/useSubtitles.js';
 import { getMeta } from './lib/cinemeta.js';
 import { resolveCarrySec } from './lib/progress.js';
 
+// A RESUMED saved source gets this long to come alive before the player
+// falls back to a fresh sources scan (onSourceDead) instead of showing a
+// fail card. Connecting streams are never failed on a timer otherwise —
+// hosts can take a long time, and a stale URL is the ONE case where
+// waiting longer is pointless. Fresh picks: no deadline at all.
+const RESUME_FALLBACK_MS = 90000;
+
 export default function App() {
   const [view, setView] = useState('home');
   const [query, setQuery] = useState('');
@@ -292,6 +299,8 @@ export default function App() {
         // fresh playback resets the resume point — unless this pick is a
         // source switch, which keeps the position we carried over
         positionSec: carrySec,
+        durationSec: (playerProgressRef.current &&
+          playerProgressRef.current.durationSec) || null,
         sourceUrl: src && src.url ? String(src.url) : null,
         sourceProvider: src && src.provider ? String(src.provider) : null,
         sourceTitle: src && src.title ? String(src.title) : null,
@@ -356,6 +365,7 @@ export default function App() {
         poster: entry.poster, season: entry.season, episode: entry.episode,
         episodeTitle: entry.episodeTitle, still: entry.still,
         backdrop: entry.backdrop, positionSec: entry.positionSec || 0,
+        durationSec: entry.durationSec || null,
         sourceUrl: entry.sourceUrl, sourceProvider: entry.sourceProvider,
         sourceTitle: entry.sourceTitle, sourceFormat: entry.sourceFormat,
         sourceHeaders: entry.sourceHeaders
@@ -377,6 +387,21 @@ export default function App() {
       ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
       : null);
     setResumeSec(entry.positionSec > 5 ? entry.positionSec : 0);
+    // Seed the carry snapshot: a saved source URL is host-session-bound and
+    // usually EXPIRED after an app restart. If it dies, the fallback sources
+    // scan's next pick must resume from HERE instead of restarting at 0:00
+    // (the player's own onProgress snapshot never fires on a stream that
+    // never played). Seeding also stops openPlayer's history write from
+    // overwriting the stored position with 0 — that was what made Continue
+    // watching "never ever work".
+    playerProgressRef.current = {
+      imdbId: entry.imdbId,
+      season: entry.type === 'series' ? (entry.season ?? 1) : null,
+      episode: entry.type === 'series' ? (entry.episode ?? 1) : null,
+      positionSec: entry.positionSec || 0,
+      durationSec: entry.durationSec || null,
+      at: Date.now()
+    };
     // meta loads in the background — feeds the player header, subtitle
     // context and the sources fallback ("Change source")
     getMeta(entry.type, entry.imdbId)
@@ -385,6 +410,56 @@ export default function App() {
       })
       .catch(() => {});
   }, [openDetails, streams]);
+
+  // ── dead-source fallback (Continue-watching resume) ────────────────────
+  // A saved source URL is host-session-bound: after an app restart it is
+  // almost always expired, so a resumed player used to dead-end on a fail
+  // card AND the first re-pick restarted at 0:00 (the carry snapshot never
+  // fires on a stream that never played). Now: when a resumed source dies,
+  // the player falls back AUTOMATICALLY to a fresh sources scan for the
+  // same title/episode — the snapshot seeded by resumeHistory makes the
+  // next pick resume at the saved position.
+  const openScanForEntry = useCallback((entry) => {
+    if (!entry || !entry.imdbId) return false;
+    const m = {
+      type: entry.type || 'movie',
+      id: entry.imdbId,
+      name: entry.title || 'Now playing',
+      poster: entry.poster || null,
+      year: entry.year || null
+    };
+    const ep = m.type === 'series'
+      ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
+      : { title: m.name, season: 1, episode: 1 };
+    resumeEntryRef.current = null;
+    setActiveSource(null);                     // close the dead player
+    setMeta(m);                                // SourcesView header + openPlayer carry
+    setEpisode(ep);
+    detailsReturnRef.current = 'home';         // backing out of the scan lands home
+    subs.resetForEpisode();
+    streams.reset();
+    startScanFor(m, ep);
+    setView('sources');
+    return true;
+  }, [streams, subs, startScanFor]);
+
+  // PlayerView onSourceDead — returns true when handled (player must NOT
+  // show its fail card). Real meta (background load landed) reuses the
+  // standard change-source flow; otherwise the history entry builds the
+  // scan context itself.
+  const handleSourceDead = useCallback(() => {
+    const entry = resumeEntryRef.current;
+    if (!entry || !entry.imdbId) return false;
+    resumeEntryRef.current = null;
+    setActiveSource(null);
+    if (meta) {
+      openSources(meta.type === 'series'
+        ? { season: entry.season ?? 1, episode: entry.episode ?? 1, title: entry.episodeTitle || '' }
+        : { title: meta.name, season: 1, episode: 1 });
+      return true;
+    }
+    return openScanForEntry(entry);
+  }, [meta, openSources, openScanForEntry]);
 
   // ── player episodes panel → play a different episode ───────────────────
   // Drops the playback overlay and lands on the picked episode's source
@@ -402,16 +477,22 @@ export default function App() {
   // for the playing title/episode; Return never lands here anymore.
   const changeSourceFromPlayer = useCallback(() => {
     setSubmenuOpen(false);
+    const entry = resumeEntryRef.current;      // captured before clearing
     setActiveSource(null);
     resumeEntryRef.current = null;
     // playerProgressRef deliberately KEPT: the player's unmount tick saves
     // the final position, and openPlayer carries it into whichever source
     // the user picks next for this same title/episode.
-    if (!meta) return;
-    openSources(meta.type === 'series' && episode
-      ? episode
-      : { title: meta.name, season: 1, episode: 1 });
-  }, [meta, episode, openSources]);
+    if (meta) {
+      openSources(meta.type === 'series' && episode
+        ? episode
+        : { title: meta.name, season: 1, episode: 1 });
+      return;
+    }
+    // Resume sessions load meta in the background — a click before it
+    // lands used to silently no-op. Fall back to the history entry.
+    openScanForEntry(entry);
+  }, [meta, episode, openSources, openScanForEntry]);
 
   // ── player top-left container → the title's details page ───────────────
   // Uses the meta already loaded for playback (no refetch). Series land on
@@ -668,6 +749,8 @@ export default function App() {
           onProgress={handlePlayerProgress}
           onBack={closePlayer}
           onChangeSource={changeSourceFromPlayer}
+          onSourceDead={handleSourceDead}
+          staleTimeoutMs={resumeEntryRef.current ? RESUME_FALLBACK_MS : null}
           onPickEpisode={pickEpisodeFromPlayer}
           onOpenDetails={openDetailsFromPlayer}
           submenuOpen={submenuOpen}
