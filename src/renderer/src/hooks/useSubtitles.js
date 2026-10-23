@@ -54,6 +54,24 @@ export function useSubtitles() {
   const embeddedListRef = useRef([]);   // mirrors the `embedded` state for callbacks
   const userActedKeyRef = useRef('');   // episode key the user explicitly picked for
 
+  // ── context (which title/episode subs belong to) ──────────────────────
+  const setContext = useCallback((ctx) => { ctxRef.current = ctx; }, []);
+
+  // DECLARATION ORDER MATTERS: buildParams must come before episodeKeyOf /
+  // search — they list it in their useCallback dep arrays, and dep arrays
+  // evaluate during render, so a later declaration is a TDZ crash
+  // ("Cannot access 'buildParams' before initialization").
+  const buildParams = useCallback(() => {
+    const ctx = ctxRef.current || {};
+    return {
+      name: ctx.name || '',
+      imdbId: ctx.imdbId || null,       // Cinemeta ids are imdb tt-ids
+      season: ctx.isSeries ? ctx.season : null,
+      episode: ctx.isSeries ? ctx.episode : null,
+      year: ctx.year || null
+    };
+  }, []);
+
   // Stable episode key (same shape search() uses)
   const episodeKeyOf = useCallback(() => {
     const params = buildParams();
@@ -72,20 +90,6 @@ export function useSubtitles() {
       }
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── context (which title/episode subs belong to) ──────────────────────
-  const setContext = useCallback((ctx) => { ctxRef.current = ctx; }, []);
-
-  const buildParams = useCallback(() => {
-    const ctx = ctxRef.current || {};
-    return {
-      name: ctx.name || '',
-      imdbId: ctx.imdbId || null,       // Cinemeta ids are imdb tt-ids
-      season: ctx.isSeries ? ctx.season : null,
-      episode: ctx.isSeries ? ctx.episode : null,
-      year: ctx.year || null
-    };
   }, []);
 
   // ── search (Helix _fetchInitialSubtitles / refresh) ────────────────────
