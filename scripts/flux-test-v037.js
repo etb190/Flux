@@ -77,8 +77,8 @@ console.log('D. PlayerView — position feed');
 const pv = read('src/renderer/src/components/PlayerView.jsx');
 ok(/function PlayerView\(\{[^}]*onProgress[,}]/.test(pv), 'PlayerView takes onProgress');
 ok(/onProgressRef = useRef\(onProgress\)/.test(pv), 'onProgress kept in a ref (no stale closures)');
-ok(/if \(onProgressRef\.current\) \{\s*\n\s*onProgressRef\.current\(\{\s*\n\s*imdbId: \(meta && meta\.id\) \|\| null,\s*\n\s*season: episode \? \(episode\.season \?\? 1\) : null,\s*\n\s*episode: episode \? \(episode\.episode \?\? 1\) : null,/.test(pv),
-  'saveProgress reports imdbId + season/episode + position');
+ok(/if \(onProgressRef\.current\) \{\s*\n\s*onProgressRef\.current\(\{\s*\n\s*imdbId: \(meta && meta\.id\) \|\| lastImdbIdRef\.current,\s*\n\s*season: episode \? \(episode\.season \?\? 1\) : null,\s*\n\s*episode: episode \? \(episode\.episode \?\? 1\) : null,/.test(pv),
+  'saveProgress reports imdbId + season/episode + position (v0.41: pre-meta snapshots keep the last known id)');
 ok(/\}, \[meta, episode\]\);/.test(pv), 'saveProgress tracks episode changes');
 
 console.log('E. PlayerView — one-shot silent reload before the fail card');

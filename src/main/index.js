@@ -6,6 +6,7 @@ const { searchSubtitles, downloadSubtitle, cancelSubtitles } = require('./subtit
 const home = require('./home.js');
 const discover = require('./discover.js');
 const library = require('./library.js');
+const subsMemory = require('./subsMemory.js');
 const tmdbapi = require('./tmdbapi.js');
 const { ANGLE_BACKENDS, loadSettings, saveSettings } = require('./settings.js');
 const { loadWindowState, sanitizeWindowState, saveWindowState } = require('./windowState.js');
@@ -30,6 +31,7 @@ if (squirrelStartup) {
 // Must be applied BEFORE app ready. Saved in userData/flux-settings.json.
 const settingsFile = () => path.join(app.getPath('userData'), 'flux-settings.json');
 const libraryFile = () => path.join(app.getPath('userData'), 'flux-library.json');
+const subsMemoryFile = () => path.join(app.getPath('userData'), 'flux-subs.json');
 
 (() => {
   const saved = loadSettings(settingsFile());
@@ -382,6 +384,15 @@ ipcMain.handle('flux:history:remove', (_e, imdbId) =>
 // Live playback progress + artwork enrichment (patches in place, no reorder)
 ipcMain.handle('flux:history:progress', (_e, imdbId, patch) =>
   library.updateHistoryProgress(libraryFile(), imdbId, patch));
+
+// ── IPC: subtitle memory (remember the last choice per title) ───────────
+// Picks re-apply across episodes of a show and across resumes; see
+// useSubtitles.js for the apply rules.
+ipcMain.handle('flux:subs:memory:get', () => subsMemory.loadSubsMemory(subsMemoryFile()));
+ipcMain.handle('flux:subs:memory:set', (_e, titleKey, choice) => {
+  try { return subsMemory.recordSubsChoice(subsMemoryFile(), titleKey, choice); }
+  catch (_err) { return null; }
+});
 
 // ── IPC: watched list (manual list that drives the suggestions) ──────────
 ipcMain.handle('flux:watched:list', () => library.listWatched(libraryFile()));

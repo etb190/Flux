@@ -225,9 +225,16 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     lastReloadClickRef.current = now;
     const art = artRef.current;
     const v = art && art.video;
-    if (v && Number.isFinite(v.currentTime)) {
+    if (v && Number.isFinite(v.currentTime) && v.currentTime >= 3) {
       resumeSecRef.current = Math.floor(Math.max(0, v.currentTime));  // tryResumeSeek reapplies it
       wasPausedOnReloadRef.current = Boolean(v.paused);  // restore pause state after
+    } else {
+      // No meaningful live position (still connecting, or the resume seek
+      // hasn't applied yet — hosts can take 30s+ to answer): the element
+      // reports ~0, and capturing it would ERASE the pending resume target
+      // (resume → impatient Reload = restart from 0:00). Keep the target.
+      // The fresh rebuild autoplays toward it.
+      wasPausedOnReloadRef.current = false;
     }
     // The (position/duration/playedOnce) guards from tryStaleReload are
     // deliberately absent: even a never-started stream (currentTime 0, no
@@ -326,11 +333,18 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
   }, []);
 
   // ── continue-watching progress (same-source resume) ────────────────────
+  // A player instance is mounted for ONE title — meta either is loaded or
+  // lands later mid-session (resume flow). Remembering the last known id
+  // keeps progress snapshots keyed to the title even when they fire before
+  // meta lands (imdbId null would make App's carry resolver drop the
+  // position on the very next source pick).
+  const lastImdbIdRef = useRef(null);
   const saveProgress = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (!Number.isFinite(video.duration) || video.duration <= 0) return;
     if (!Number.isFinite(video.currentTime) || video.currentTime < 3) return;
+    if (meta && meta.id && /^tt\d+$/.test(meta.id)) lastImdbIdRef.current = meta.id;
     // watched to the end → the next resume restarts from the top
     const pos = video.currentTime > video.duration * 0.95
       ? 0 : video.currentTime;
@@ -338,7 +352,7 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     // resumes from here instead of restarting at 0:00
     if (onProgressRef.current) {
       onProgressRef.current({
-        imdbId: (meta && meta.id) || null,
+        imdbId: (meta && meta.id) || lastImdbIdRef.current,
         season: episode ? (episode.season ?? 1) : null,
         episode: episode ? (episode.episode ?? 1) : null,
         positionSec: Math.round(pos),

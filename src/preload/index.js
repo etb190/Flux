@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('fluxAPI', {
   onSubsProgress: (callback) => {
     ipcRenderer.on('flux:subs:progress', (_event, payload) => callback(payload));
   },
+  // Subtitle memory (re-apply the last choice across episodes + resumes)
+  subsMemoryGet: () => ipcRenderer.invoke('flux:subs:memory:get'),
+  subsMemorySet: (titleKey, choice) =>
+    ipcRenderer.invoke('flux:subs:memory:set', titleKey, choice),
   // Player: header injection / CORS rules for direct stream playback
   setPlayerRules: (rules) => ipcRenderer.invoke('flux:player-rules', rules),
   clearPlayerRules: () => ipcRenderer.invoke('flux:player-rules:clear'),

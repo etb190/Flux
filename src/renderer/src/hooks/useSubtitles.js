@@ -2,6 +2,14 @@
  * External SRT/VTT/ASS variants (searched via main process) + embedded HLS
  * WebVTT tracks, rendered by our own overlay (styling + delay support).
  * Only en/fr/it/es/ar survive the whitelist (lib/subsParser.subLangLabel).
+ *
+ * Subtitle MEMORY: the last user choice is persisted per title
+ * (userData/flux-subs.json via main) and re-applied automatically —
+ * across RESUMES of the same video (the exact external file when it is
+ * offered again) and across EPISODES of the same show (the remembered
+ * language, external first, embedded as fallback). Turning subs off is
+ * remembered too — last action wins. An explicit pick for the current
+ * episode always beats the memory (the user already chose).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -39,6 +47,32 @@ export function useSubtitles() {
   const hlsRef = useRef(null);
   const ctxRef = useRef(null);        // {name, imdbId, season, episode, year, isEmbed}
   const eventHandlerRef = useRef(null);
+  const maybeAutoApplyRef = useRef(() => {});   // mirrored below (defined later)
+
+  // ── subtitle memory (persists across episodes + resumes) ──────────────
+  const memoryRef = useRef(null);       // { titles: {ttId: choice}, last } | null until loaded
+  const embeddedListRef = useRef([]);   // mirrors the `embedded` state for callbacks
+  const userActedKeyRef = useRef('');   // episode key the user explicitly picked for
+
+  // Stable episode key (same shape search() uses)
+  const episodeKeyOf = useCallback(() => {
+    const params = buildParams();
+    return [params.imdbId || params.name, params.season ?? '', params.episode ?? ''].join(':');
+  }, [buildParams]);
+
+  // Load the persisted memory once per session (main reads flux-subs.json)
+  useEffect(() => {
+    const api = fluxApi();
+    if (!api || typeof api.subsMemoryGet !== 'function') return;
+    Promise.resolve(api.subsMemoryGet()).then((mem) => {
+      if (mem && typeof mem === 'object') {
+        memoryRef.current = { titles: mem.titles || {}, last: mem.last || null };
+        // Memory landing AFTER results (slow disk / fast providers): apply now
+        if (maybeAutoApplyRef.current) maybeAutoApplyRef.current();
+      }
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── context (which title/episode subs belong to) ──────────────────────
   const setContext = useCallback((ctx) => { ctxRef.current = ctx; }, []);
@@ -65,6 +99,7 @@ export function useSubtitles() {
     const key = [params.imdbId || params.name, params.season ?? '', params.episode ?? ''].join(':');
     if (!force && key === episodeKeyRef.current && groupsRef.current.length) return;
     episodeKeyRef.current = key;
+    userActedKeyRef.current = '';       // fresh search → nothing chosen for it yet
     groupsRef.current = [];
     setGroups([]);
     selectedRef.current = null;
@@ -72,6 +107,7 @@ export function useSubtitles() {
     cuesRef.current = [];
     setCuesVersion((v) => v + 1);
     setEmbedded([]);
+    embeddedListRef.current = [];
     embeddedActiveRef.current = null;
     setEmbeddedActiveState(null);
     embeddedCuesRef.current = new Map();
@@ -118,9 +154,13 @@ export function useSubtitles() {
           next.sort((a, b) => subMenuCompare(a.language, b.language));
           groupsRef.current = next;
           setGroups(next);
+          // New material landed — try the remembered choice (no-op when the
+          // user already picked for this episode or something is playing).
+          if (maybeAutoApplyRef.current) maybeAutoApplyRef.current();
         }
       } else if (payload.kind === 'done') {
         setPending(0);
+        if (maybeAutoApplyRef.current) maybeAutoApplyRef.current();
       }
     };
   }, []);
@@ -135,7 +175,34 @@ export function useSubtitles() {
   }, []);
 
   // ── selection actions ──────────────────────────────────────────────────
+  // `applyVariant` / `applyEmbedded` do the mechanical switch. The PUBLIC
+  // actions (menu clicks / off) additionally mark the episode as user-chosen
+  // (memory stops auto-applying there) and record the choice to disk.
+
+  // Fire & forget persist of the user's subtitle choice. Keyed by the SHOW
+  // id (covers every episode) when ctx has one, always also as the global
+  // `last` fallback. Embeds manage their own subs — never recorded.
+  const rememberChoice = useCallback((choice) => {
+    const api = fluxApi();
+    if (!api || typeof api.subsMemorySet !== 'function') return;
+    const ctx = ctxRef.current || {};
+    if (ctx.isEmbed) return;
+    const key = ctx.imdbId || null;
+    // optimistic local cache — a fast episode switch can already apply it
+    if (memoryRef.current) {
+      if (key) memoryRef.current.titles[key] = choice;
+      memoryRef.current.last = choice;
+    }
+    Promise.resolve(api.subsMemorySet(key, choice)).then((mem) => {
+      if (mem && typeof mem === 'object' && memoryRef.current) {
+        memoryRef.current = { titles: mem.titles || {}, last: mem.last || null };
+      }
+    }).catch(() => {});
+  }, []);
+
   const off = useCallback(() => {
+    userActedKeyRef.current = episodeKeyOf();      // explicit off beats the memory here
+    rememberChoice({ kind: 'off' });
     selectedRef.current = null;
     setSelectedUrl(null);
     cuesRef.current = [];
@@ -144,10 +211,10 @@ export function useSubtitles() {
     embeddedActiveRef.current = null;
     setEmbeddedActiveState(null);
     setMenuNotice(null);
-  }, []);
+  }, [episodeKeyOf, rememberChoice]);
 
-  const selectVariant = useCallback(async (variant) => {
-    selectedRef.current = variant;
+  const applyVariant = useCallback(async (variant, auto) => {
+    selectedRef.current = variant;                 // synchronous → maybeAutoApply re-entry guard
     setSelectedUrl(String(variant.downloadUrl));
     setLoadingUrl(String(variant.downloadUrl));
     setMenuNotice(null);
@@ -158,7 +225,7 @@ export function useSubtitles() {
         setLoadingUrl(null);
         selectedRef.current = null;
         setSelectedUrl(null);
-        setMenuNotice('Failed to download subtitle \u2014 try another one.');
+        if (!auto) setMenuNotice('Failed to download subtitle \u2014 try another one.');
         return;
       }
       cuesRef.current = subParse(res.content, res.format === 'vtt' || res.format === 'ass' ? res.format : null);
@@ -174,8 +241,19 @@ export function useSubtitles() {
     }
   }, []);
 
-  const selectEmbedded = useCallback((id) => {
-    embeddedActiveRef.current = id;
+  const selectVariant = useCallback((variant) => {
+    if (!variant || !variant.downloadUrl) return;
+    userActedKeyRef.current = episodeKeyOf();
+    rememberChoice({
+      kind: 'external',
+      language: String(variant.language || 'Unknown'),
+      url: String(variant.downloadUrl)
+    });
+    return applyVariant(variant, false);
+  }, [applyVariant, episodeKeyOf, rememberChoice]);
+
+  const applyEmbedded = useCallback((id, auto) => {
+    embeddedActiveRef.current = id;                // synchronous re-entry guard
     setEmbeddedActiveState(id);
     selectedRef.current = null;
     setSelectedUrl(null);
@@ -185,7 +263,55 @@ export function useSubtitles() {
       try { hlsRef.current.subtitleTrack = id; } catch (_) {}
     }
     setMenuNotice(null);
+    return id;
   }, []);
+
+  const selectEmbedded = useCallback((id) => {
+    const track = embeddedListRef.current.find((t) => t.id === id);
+    userActedKeyRef.current = episodeKeyOf();
+    rememberChoice({ kind: 'embedded', language: (track && track.name) || '' });
+    return applyEmbedded(id, false);
+  }, [applyEmbedded, episodeKeyOf, rememberChoice]);
+
+  // ── auto-apply the remembered choice ───────────────────────────────────
+  // Runs whenever subtitle material lands (provider batch / embedded tracks
+  // parsed / memory loaded). Applies the choice remembered for this title —
+  // or the global last one — while the user hasn't picked anything for this
+  // episode and nothing is playing yet:
+  //   external memory → the EXACT file when offered again (same-video
+  //                     resume), else the first variant of the language
+  //                     (next episode of the show);
+  //   embedded memory → the matching embedded track, else the external
+  //                     language group as fallback;
+  //   'off' memory    → nothing (subs stay off — last action wins).
+  const maybeAutoApply = useCallback(() => {
+    const ctx = ctxRef.current || {};
+    if (ctx.isEmbed) return;                       // embeds manage their own subs
+    if (!memoryRef.current) return;
+    if (selectedRef.current || embeddedActiveRef.current != null) return;
+    if (userActedKeyRef.current === episodeKeyOf()) return;
+    const choice = (ctx.imdbId && memoryRef.current.titles[ctx.imdbId]) ||
+      memoryRef.current.last;
+    if (!choice || choice.kind === 'off') return;
+    if (choice.kind === 'external') {
+      if (choice.url) {
+        const exact = groupsRef.current.flatMap((g) => g.variants)
+          .find((v) => String(v.downloadUrl || '').toLowerCase() ===
+                       String(choice.url).toLowerCase());
+        if (exact) { applyVariant(exact, true); return; }
+      }
+      if (choice.language) {
+        const group = groupsRef.current.find((g) => g.language === choice.language);
+        if (group && group.variants.length) { applyVariant(group.variants[0], true); return; }
+      }
+    } else if (choice.kind === 'embedded' && choice.language) {
+      const track = embeddedListRef.current.find((t) => t.name === choice.language);
+      if (track) { applyEmbedded(track.id, true); return; }
+      const group = groupsRef.current.find((g) => g.language === choice.language);
+      if (group && group.variants.length) { applyVariant(group.variants[0], true); return; }
+    }
+  }, [applyEmbedded, applyVariant, episodeKeyOf]);
+  useEffect(() => { maybeAutoApplyRef.current = maybeAutoApply; }, [maybeAutoApply]);
 
   const setDelay = useCallback((d) => {
     const clamped = Math.max(-30, Math.min(30, Math.round(d * 10) / 10));
@@ -215,10 +341,15 @@ export function useSubtitles() {
         // Arabic, Italian, Spanish) instead of manifest order.
         .sort((a, b) => subMenuOrderIndex(a.name) - subMenuOrderIndex(b.name) ||
                         a.name.localeCompare(b.name));
+      embeddedListRef.current = tracks;
       setEmbedded(tracks);
     } catch (_err) {
+      embeddedListRef.current = [];
       setEmbedded([]);
     }
+    // Tracks arrive at MANIFEST_PARSED — often before/without provider
+    // batches: this is the embedded-memory apply chance.
+    maybeAutoApplyRef.current();
   }, []);
 
   const pushEmbeddedCues = useCallback((data) => {
@@ -237,7 +368,8 @@ export function useSubtitles() {
   const detachHls = useCallback(() => { hlsRef.current = null; }, []);
 
   // ── lifecycle resets ───────────────────────────────────────────────────
-  // New episode opened (openSources): everything from the previous one goes.
+  // New episode opened (openSources): everything from the previous one goes;
+  // the remembered choice re-applies automatically when the new results land.
   const resetForEpisode = useCallback(() => {
     const api = fluxApi();
     if (api && typeof api.cancelSubtitles === 'function') {
@@ -252,8 +384,10 @@ export function useSubtitles() {
     cuesRef.current = [];
     setCuesVersion((v) => v + 1);
     episodeKeyRef.current = '';
+    userActedKeyRef.current = '';       // nothing chosen for the new episode yet
     setLoadingUrl(null);
     setEmbedded([]);
+    embeddedListRef.current = [];
     embeddedActiveRef.current = null;
     setEmbeddedActiveState(null);
     embeddedCuesRef.current = new Map();
@@ -274,6 +408,7 @@ export function useSubtitles() {
     setPending(0);
     setLoadingUrl(null);
     setEmbedded([]);
+    embeddedListRef.current = [];
     embeddedActiveRef.current = null;
     setEmbeddedActiveState(null);
     embeddedCuesRef.current = new Map();

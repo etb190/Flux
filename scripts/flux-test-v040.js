@@ -41,8 +41,8 @@ ok(/resumeSecRef\.current = Math\.floor\(Math\.max\(0, v\.currentTime\)\);/.test
   'captures the EXACT current position into resumeSecRef (tryResumeSeek reapplies it)');
 ok(/wasPausedOnReloadRef\.current = Boolean\(v\.paused\);/.test(reloadBody),
   'captures paused state (reload stays paused / resumes playing as it was)');
-ok(/if \(v && Number\.isFinite\(v\.currentTime\)\)/.test(reloadBody),
-  'position capture is guarded (no video element yet → still rebuilds)');
+ok(/if \(v && Number\.isFinite\(v\.currentTime\) && v\.currentTime >= 3\)/.test(reloadBody),
+  'position capture is guarded (no video element yet → still rebuilds; v0.41: only positions >= 3s, so a connecting resume never erases its pending target)');
 ok(reloadBody.indexOf('saveProgressRef.current()') >= 0, 'progress saved before the rebuild (history keeps the resume point)');
 ok(reloadBody.indexOf('saveProgressRef.current()') < reloadBody.indexOf('setReloadNonce'),
   'progress save happens BEFORE the teardown is scheduled');
@@ -81,7 +81,8 @@ ok(/data-testid="player-fail-reload"[\s\S]{0,400}<span>Reload source<\/span>|dat
   'labeled "Reload source"');
 
 console.log('F. Housekeeping');
-ok(pkg.version === '0.40.0', 'package.json version is 0.40.0');
+const vMinor = parseInt((pkg.version || '').split('.')[1], 10);
+ok(Number.isFinite(vMinor) && vMinor >= 40, 'package.json version carries the reload-source feature (>= 0.40)');
 ok(/export function SwitchIcon/.test(icons) && /export function BackIcon/.test(icons) &&
    /export function ListIcon/.test(icons), 'existing icons untouched');
 
