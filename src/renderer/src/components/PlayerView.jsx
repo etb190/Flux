@@ -15,7 +15,7 @@ import Hls from 'hls.js';
 import SubtitleMenu from './SubtitleMenu.jsx';
 import PlayerEpisodes from './PlayerEpisodes.jsx';
 import { fmtDelay } from '../lib/format.js';
-import { BackIcon, SwitchIcon, ListIcon, WinMinimizeIcon, WinMaximizeIcon, WinRestoreIcon, WinCloseIcon } from './icons.jsx';
+import { BackIcon, SwitchIcon, ReloadIcon, ListIcon, WinMinimizeIcon, WinMaximizeIcon, WinRestoreIcon, WinCloseIcon } from './icons.jsx';
 
 const CHROME_IDLE_MS = 2600;
 
@@ -207,6 +207,35 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
     setBuffering(true);
     setReloadNonce((n) => n + 1);                  // re-runs the open effect
     return true;
+  }, [isEmbed, isTrailer]);
+
+  // ── manual "Reload source" (the user-facing version of tryStaleReload) ─
+  // The automatic silent rebuild is ONE attempt per source; when resume or
+  // unpause still goes stale afterwards, this button rebuilds EVERYTHING
+  // from scratch — hls.js, Artplayer, the <video> element, buffers, retry
+  // budgets, timers — on the SAME source and seeks back to the exact
+  // position we were on. Unlimited by design: every click is explicit user
+  // intent, so unlike tryStaleReload there is no one-shot guard; each click
+  // even RE-ARMS the automatic rescue for the fresh attempt.
+  const lastReloadClickRef = useRef(0);
+  const reloadSource = useCallback(() => {
+    if (isEmbed || isTrailer) return;
+    const now = Date.now();
+    if (now - lastReloadClickRef.current < 400) return;  // double-click guard
+    lastReloadClickRef.current = now;
+    const art = artRef.current;
+    const v = art && art.video;
+    if (v && Number.isFinite(v.currentTime)) {
+      resumeSecRef.current = Math.floor(Math.max(0, v.currentTime));  // tryResumeSeek reapplies it
+      wasPausedOnReloadRef.current = Boolean(v.paused);  // restore pause state after
+    }
+    // The (position/duration/playedOnce) guards from tryStaleReload are
+    // deliberately absent: even a never-started stream (currentTime 0, no
+    // metadata yet) or a fail-carded one is worth a manual rebuild.
+    saveProgressRef.current();              // history keeps the resume point
+    staleReloadUsedRef.current = false;     // fresh attempt → re-arm the auto rescue
+    setBuffering(true);
+    setReloadNonce((n) => n + 1);           // re-runs the open effect (full teardown)
   }, [isEmbed, isTrailer]);
 
   // ── Discord Rich Presence (Helix _updateDiscordRpc port) ───────────────
@@ -969,9 +998,11 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             <span>Open on YouTube</span>
           </button>
         ) : null}
-        {/* Episodes + Change source form one tight cluster (gap-2 inside vs
-            the top bar's uniform gap-4), pulled 8px closer to the window
-            controls (-mr-2) so Change source sits right beside minimize. */}
+        {/* Episodes + Change source + Reload source form one tight cluster
+            (gap-2 inside vs the top bar's uniform gap-4), pulled 8px closer
+            to the window controls (-mr-2) so the cluster sits right beside
+            minimize. Reload source is the manual stale-recovery escape
+            hatch — same source, same position, everything rebuilt. */}
         <div className="flex items-center gap-2 shrink-0 -mr-2">
           {canBrowseEpisodes ? (
             <button
@@ -1000,6 +1031,17 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
             <SwitchIcon />
             <span>Change source</span>
           </button>
+          {!isEmbed && !isTrailer ? (
+            <button
+              data-testid="player-reload"
+              title="Rebuild this source from scratch at the current position"
+              onClick={reloadSource}
+              className="app-no-drag flex items-center gap-1.5 border border-edge bg-raised/80 px-3 py-1.5 text-sm text-ink hover:border-accent transition-colors shrink-0"
+            >
+              <ReloadIcon />
+              <span>Reload source</span>
+            </button>
+          ) : null}
         </div>
         <PlayerWindowControls />
       </div>
@@ -1120,6 +1162,15 @@ export default function PlayerView({ source, sources, meta, episode, subs, resum
                 className="bg-accent px-5 py-2.5 font-medium text-white hover:brightness-110"
               >
                 Pick another source
+              </button>
+              {/* Manual stale recovery straight from the fail card: same
+                  source, same position, everything rebuilt from scratch. */}
+              <button
+                data-testid="player-fail-reload"
+                onClick={reloadSource}
+                className="bg-white/10 px-5 py-2.5 font-medium text-white hover:bg-white/20"
+              >
+                Reload source
               </button>
               <button
                 data-testid="player-fail-back"
